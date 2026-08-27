@@ -1,0 +1,1 @@
+# Declare the app as a package, containing the main application logic and the api routes

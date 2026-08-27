@@ -1,0 +1,13 @@
+opencv-contrib-python==5.0.0.93
+uvicorn==0.52.4
+fastapi==0.141.1
+python-multipart==0.0.32    
+torch==2.13.0 --extra-index-url https://download.pytorch.org/whl/cu132
+torchvision==0.28.0 --extra-index-url https://download.pytorch.org/whl/cu132
+ollama==0.6.2
+streamlit==1.62.0
+pydantic==2.13.4
+kagglehub==1.0.2
+matplotlib==3.11.1
+pillow==12.3.0
+huggingface-hub==1.28.0

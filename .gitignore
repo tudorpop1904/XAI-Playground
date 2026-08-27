@@ -1,0 +1,69 @@
+# ==============================
+# Python
+# ==============================
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+dist/
+build/
+.venv/
+
+# ==============================
+# Environment / Secrets
+# ==============================
+.env
+.env.local
+
+# ==============================
+# Runtime Artifacts (produced by running the app)
+# ==============================
+storage/app.db
+storage/logs.txt
+storage/models/*.pth
+storage/models/*.pt
+storage/models/*.pb
+storage/datasets/
+storage/images/
+
+# ==============================
+# PyTorch / ML artifacts
+# ==============================
+*.pt
+*.pth
+*.onnx
+
+# ==============================
+# Manim renders
+# ==============================
+media/
+*.mp4
+
+# ==============================
+# Thesis (separate LaTeX project)
+# ==============================
+Thesis/
+
+# ==============================
+# IDE / OS
+# ==============================
+.vscode/
+.idea/
+*.swp
+*~
+Thumbs.db
+.DS_Store
+
+# ==============================
+# Misc scratch / export
+# ==============================
+export/
+edge/
+scripts/
+manim/
+*.tex
+ground-up.md
+implementation_plan.md
+client_server_architecture.tex
+test_enhancer.py
+test_img.pt

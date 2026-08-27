@@ -1,0 +1,22 @@
+# Normalize line endings for cross-platform collaboration
+* text=auto
+
+# Force LF on all source files
+*.py text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.txt text eol=lf
+*.cfg text eol=lf
+
+# Mark binary files explicitly (prevents git from diffing them)
+*.pt binary
+*.pth binary
+*.pb binary
+*.onnx binary
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.mp4 binary

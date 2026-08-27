@@ -6,7 +6,7 @@
 # XAI explanation, image enhancement, and metric computation.
 # ============================================================
 
-FROM pytorch/pytorch:2.2.0-cuda12.1-cudnn8-runtime
+FROM python:3.10-slim
 
 LABEL maintainer="Tudor Pop <tudor.pop@student.utcluj.ro>"
 LABEL description="XAI Playground — FastAPI Backend"

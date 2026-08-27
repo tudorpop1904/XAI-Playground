@@ -19,15 +19,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Install only the packages the UI actually needs (no CUDA, no OpenCV, no ML libs)
-RUN pip install --no-cache-dir \
-    streamlit==1.62.0 \
-    requests \
-    matplotlib==3.11.1 \
-    pillow==12.3.0 \
-    torch==2.13.0+cpu --extra-index-url https://download.pytorch.org/whl/cpu \
-    numpy
-
+# Copy and install UI requirements
+COPY requirements-ui.txt .
+RUN pip install --no-cache-dir -r requirements-ui.txt
 # Copy only the UI source code
 COPY app.py .
 COPY pages/ ./pages/
@@ -41,7 +35,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 
 # Run Streamlit headless (no browser auto-open inside a container)
 CMD ["streamlit", "run", "app.py", \
-     "--server.address=0.0.0.0", \
-     "--server.port=8501", \
-     "--server.headless=true", \
-     "--browser.gatherUsageStats=false"]
+    "--server.address=0.0.0.0", \
+    "--server.port=8501", \
+    "--server.headless=true", \
+    "--browser.gatherUsageStats=false"]

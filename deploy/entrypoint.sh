@@ -10,8 +10,8 @@ fi
 source .venv/bin/activate
 
 # 2. Download dependencies
-echo -e "\033[1;33mInstalling dependencies from requirements.txt...\033[0m"
-pip install --no-cache-dir -r requirements.txt > /dev/null
+echo -e "\033[1;33mInstalling dependencies from requirements-api.txt and requirements-ui.txt...\033[0m"
+pip install --no-cache-dir -r requirements-api.txt -r requirements-ui.txt > /dev/null
 
 # 3. Start FastAPI Server in background
 echo -e "\033[1;33mStarting FastAPI Backend on port 8000...\033[0m"

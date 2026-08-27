@@ -14,8 +14,8 @@ Write-Host "Activating virtual environment..." -ForegroundColor Green
 . .\.venv\Scripts\Activate.ps1
 
 # 2. Install Dependencies
-Write-Host "Installing dependencies from requirements.txt..." -ForegroundColor Yellow
-pip install --no-cache-dir -r requirements.txt | Out-Null
+Write-Host "Installing dependencies from requirements-api.txt and requirements-ui.txt..." -ForegroundColor Yellow
+pip install --no-cache-dir -r requirements-api.txt -r requirements-ui.txt | Out-Null
 
 # 3. Start FastAPI Server in background
 Write-Host "Starting FastAPI Backend on port 8000..." -ForegroundColor Yellow

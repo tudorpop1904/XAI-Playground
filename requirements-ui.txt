@@ -1,0 +1,6 @@
+streamlit==1.62.0
+requests==2.32.3
+matplotlib==3.11.1
+pillow==12.3.0
+numpy
+torch==2.13.0 --extra-index-url https://download.pytorch.org/whl/cpu

@@ -1,0 +1,99 @@
+# ============================================================
+# docker-compose.yml — XAI Playground Multi-Container Orchestration
+# ============================================================
+# Services:
+#   api     — FastAPI backend (GPU, PyTorch, OpenCV, ML engines)
+#   ui      — Streamlit frontend (CPU-only, lightweight)
+#   ollama  — Local LLM server (Llama 3.1)
+#
+# Shared Volume:
+#   playground_storage — Mounted in api + ui for heatmap/image exchange
+# ============================================================
+
+services:
+
+  # ─── FastAPI Backend ───────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    container_name: xai-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - playground_storage:/app/storage
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - HF_HOME=/app/storage/.cache/huggingface
+      - KAGGLE_CACHE_DIR=/app/storage/.cache/kagglehub
+    networks:
+      - playground_net
+    depends_on:
+      ollama:
+        condition: service_healthy
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  # ─── Streamlit Frontend ────────────────────────────────────
+  ui:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.ui
+    container_name: xai-ui
+    ports:
+      - "8501:8501"
+    volumes:
+      - playground_storage:/app/storage
+    environment:
+      - API_BASE_URL=http://api:8000
+    networks:
+      - playground_net
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ─── Ollama LLM Server ────────────────────────────────────
+  ollama:
+    image: ollama/ollama
+    container_name: xai-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+      - ./docker/entrypoint.ollama.sh:/entrypoint.sh
+    entrypoint: ["/bin/bash", "/entrypoint.sh"]
+    networks:
+      - playground_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434"]
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+
+# ─── Networks ──────────────────────────────────────────────
+networks:
+  playground_net:
+    driver: bridge
+
+# ─── Volumes ───────────────────────────────────────────────
+volumes:
+  playground_storage:
+    driver: local
+  ollama_models:
+    driver: local

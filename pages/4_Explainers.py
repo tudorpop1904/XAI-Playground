@@ -5,6 +5,7 @@ import os
 import subprocess
 from pathlib import Path
 from PIL import Image
+from pages.config import API_BASE_URL
 
 st.title("🔦 Step 3: Explainers (XAI)")
 
@@ -65,7 +66,7 @@ if st.button("Generate Explanations", type="primary"):
                     "n_samples": n_samples
                 }
                 try:
-                    res = requests.post("http://localhost:8000/api/v1/analyze", files=files, data=data)
+                    res = requests.post(f"{API_BASE_URL}/api/v1/analyze", files=files, data=data)
                     if res.status_code == 200:
                         analysis = res.json()
                         st.session_state.detection_result = {

@@ -4,14 +4,17 @@ import torch
 from pathlib import Path
 from fastapi.staticfiles import StaticFiles
 
+import os
+
 from api.routers import analyze, enhance, history, interpret, datasets, training, generation
 
 app = FastAPI(title="Playground", description="Playground API", version="1.0.0")
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-origins = [
-    "http://localhost:8501", # streamlit
-]
+# Allow CORS from both local dev and Docker environments
+_default_origins = "http://localhost:8501,http://ui:8501"
+origins = os.environ.get("CORS_ORIGINS", _default_origins).split(",")
+
 
 app.add_middleware(
     CORSMiddleware,

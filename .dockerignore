@@ -1,0 +1,35 @@
+# Don't send these to the Docker build context
+.venv/
+.git/
+.gitignore
+.gitattributes
+.env
+__pycache__/
+*.pyc
+
+# Runtime artifacts
+storage/
+media/
+export/
+edge/
+
+# Thesis / scratch
+Thesis/
+*.tex
+*.mp4
+*.pt
+*.pth
+
+# IDE
+.vscode/
+.idea/
+
+# Docker files themselves (avoid recursion)
+docker-compose.yml
+
+# Tests (not needed in production images)
+tests/
+
+# Manim (not containerized)
+manim/
+scripts/

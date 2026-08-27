@@ -1,4 +1,5 @@
 import streamlit as st
+from pages.config import API_BASE_URL
 
 st.title("🏠 Home")
 
@@ -21,7 +22,7 @@ with col1:
 
 with col2:
     if st.button("📚 Documentation", use_container_width=True):
-        st.info("API Documentation is available at http://localhost:8000/docs")
+        st.info(f"API Documentation is available at {API_BASE_URL}/docs")
 
 with col3:
     if st.button("📋 Summary", use_container_width=True):

@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import json
+from pages.config import API_BASE_URL
 
 st.title("🤖 Step 4: LLM Interpretation")
 
@@ -15,7 +16,7 @@ Using **Ollama**, we will now translate the mathematical XAI metrics into a huma
 st.sidebar.markdown("### LLM Configuration")
 available_models = ["llama3.1:8b-instruct-q4_K_M"]
 try:
-    res = requests.get("http://localhost:8000/api/v1/interpret/status")
+    res = requests.get(f"{API_BASE_URL}/api/v1/interpret/status")
     if res.status_code == 200:
         data = res.json()
         if data.get("status") and "models" in data:
@@ -45,7 +46,7 @@ if st.button("Generate Forensic Report", type="primary"):
         try:
             # We use requests.post with stream=True to handle the StreamingResponse from FastAPI
             response = requests.post(
-                "http://localhost:8000/api/v1/interpret", 
+                f"{API_BASE_URL}/api/v1/interpret", 
                 json=payload,
                 stream=True
             )

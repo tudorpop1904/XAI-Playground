@@ -1,0 +1,47 @@
+# ============================================================
+# Dockerfile.ui — Streamlit Frontend (CPU-only, lightweight)
+# ============================================================
+# This container only serves the interactive UI.
+# It needs CPU-only PyTorch just for torch.load() on heatmaps,
+# plus matplotlib for rendering overlays.
+# ============================================================
+
+FROM python:3.10-slim
+
+LABEL maintainer="Tudor Pop <tudor.pop@student.utcluj.ro>"
+LABEL description="XAI Playground — Streamlit Frontend"
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install only the packages the UI actually needs (no CUDA, no OpenCV, no ML libs)
+RUN pip install --no-cache-dir \
+    streamlit==1.62.0 \
+    requests \
+    matplotlib==3.11.1 \
+    pillow==12.3.0 \
+    torch==2.13.0+cpu --extra-index-url https://download.pytorch.org/whl/cpu \
+    numpy
+
+# Copy only the UI source code
+COPY app.py .
+COPY pages/ ./pages/
+
+# Expose the Streamlit port
+EXPOSE 8501
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8501/_stcore/health || exit 1
+
+# Run Streamlit headless (no browser auto-open inside a container)
+CMD ["streamlit", "run", "app.py", \
+     "--server.address=0.0.0.0", \
+     "--server.port=8501", \
+     "--server.headless=true", \
+     "--browser.gatherUsageStats=false"]

@@ -4,6 +4,7 @@ import random
 from pathlib import Path
 import os
 import subprocess
+from pages.config import API_BASE_URL
 
 st.title("🧠 Step 2: Models")
 
@@ -18,7 +19,7 @@ model_type = st.selectbox("Model Architecture", ["CNN", "ViT", "KNN"])
 # Fetch available models
 available_models = []
 try:
-    res = requests.get("http://localhost:8000/api/v1/models")
+    res = requests.get(f"{API_BASE_URL}/api/v1/models")
     if res.status_code == 200:
         available_models = res.json()
 except Exception:
@@ -59,7 +60,7 @@ elif action == "Train New Model":
         with st.spinner(f"Training {model_name} on {st.session_state.dataset_slug}..."):
             try:
                 res = requests.post(
-                    "http://localhost:8000/api/v1/models/train",
+                    f"{API_BASE_URL}/api/v1/models/train",
                     json={
                         "model_name": model_name,
                         "dataset_slug": st.session_state.dataset_slug,

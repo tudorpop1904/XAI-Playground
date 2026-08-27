@@ -1,5 +1,6 @@
 import streamlit as st
 import requests
+from pages.config import API_BASE_URL
 
 st.title("🎨 Step 5: Synthetic Image Generation")
 
@@ -31,7 +32,7 @@ if st.button("Generate Image", type="primary"):
         with st.spinner(f"Generating image via {req_mode} mode... (This may take a while if downloading models locally)"):
             try:
                 res = requests.post(
-                    "http://localhost:8000/api/v1/generate",
+                    f"{API_BASE_URL}/api/v1/generate",
                     json={
                         "prompt": prompt,
                         "mode": req_mode,

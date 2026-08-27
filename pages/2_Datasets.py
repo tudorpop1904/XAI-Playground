@@ -1,5 +1,6 @@
 import streamlit as st
 import requests
+from pages.config import API_BASE_URL
 
 st.title("📁 Step 1: Datasets")
 
@@ -10,7 +11,7 @@ The system will use the entire dataset for training.
 
 # Fetch datasets from API
 try:
-    datasets = requests.get("http://localhost:8000/api/v1/datasets").json()
+    datasets = requests.get(f"{API_BASE_URL}/api/v1/datasets").json()
 except Exception as e:
     st.error(f"Cannot connect to backend: {e}")
     datasets = {}
@@ -26,7 +27,7 @@ if datasets:
     if st.button("Download & Prepare Dataset", type="primary"):
         with st.spinner("Downloading and preparing dataset via kagglehub..."):
             try:
-                res = requests.post(f"http://localhost:8000/api/v1/datasets/prepare?slug={dataset_slug}&enhance={enhance}").json()
+                res = requests.post(f"{API_BASE_URL}/api/v1/datasets/prepare?slug={dataset_slug}&enhance={enhance}").json()
                 if res.get("status") == "success":
                     st.success(f"Prepared {res['reals']} real and {res['fakes']} fake images at `{res['path']}`!")
                     st.session_state.dataset_slug = dataset_slug

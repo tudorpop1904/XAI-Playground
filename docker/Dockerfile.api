@@ -1,0 +1,51 @@
+# ============================================================
+# Dockerfile.api — FastAPI Backend (GPU-enabled)
+# ============================================================
+# Uses the official PyTorch image with CUDA support.
+# This container runs the heavy ML workloads: detection,
+# XAI explanation, image enhancement, and metric computation.
+# ============================================================
+
+FROM pytorch/pytorch:2.2.0-cuda12.1-cudnn8-runtime
+
+LABEL maintainer="Tudor Pop <tudor.pop@student.utcluj.ro>"
+LABEL description="XAI Playground — FastAPI Backend"
+
+# Avoid interactive prompts during apt-get
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install system dependencies for OpenCV (headless) and general tooling
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy requirements first for Docker layer caching
+COPY requirements.txt .
+
+# Install Python dependencies (torch is already in the base image,
+# but we keep it in requirements.txt for version pinning).
+# --extra-index-url is in requirements.txt for torch/torchvision.
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the application source code
+COPY api/ ./api/
+COPY core/ ./core/
+COPY db/ ./db/
+COPY data/ ./data/
+
+# Create the storage directory structure
+RUN mkdir -p storage/models storage/images storage/datasets
+
+# Expose the FastAPI port
+EXPOSE 8000
+
+# Health check: hit the FastAPI /docs endpoint
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD curl -f http://localhost:8000/docs || exit 1
+
+# Run with uvicorn, binding to 0.0.0.0 so it's reachable from other containers
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]

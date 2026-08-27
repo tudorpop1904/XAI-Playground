@@ -6,7 +6,7 @@
 # plus matplotlib for rendering overlays.
 # ============================================================
 
-FROM python:3.10-slim
+FROM python:3.13.1-slim
 
 LABEL maintainer="Tudor Pop <tudor.pop@student.utcluj.ro>"
 LABEL description="XAI Playground — Streamlit Frontend"

@@ -20,22 +20,25 @@ class ResultRepository:
     def save_detection(self, result: DetectionResult, image_path: str) -> int:
         """
         Saves a DetectionResult and returns its database ID.
+
+        Schema (detection_results):
+            id, model_name, image_path, ai_deepfake, confidence,
+            probabilities, metrics, created_at
         """
         cursor = self.conn.cursor()
         cursor.execute(
             """
-            INSERT INTO detection_results 
-            (model_name, image_path, ai_deepfake, confidence, probabilities, elapsed_sec, peak_ram_mb, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO detection_results
+            (model_name, image_path, ai_deepfake, confidence, probabilities, metrics, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 result.model_name,
                 image_path,
-                result.ai_deepfake,
+                int(result.ai_deepfake),
                 result.confidence,
-                json.dumps(result.returned_obj),
-                result.elapsed_seconds,
-                result.peak_ram_mb,
+                json.dumps(result.returned_obj),   # probabilities tensor/list
+                json.dumps(result.metrics),         # timing/RAM/eval metrics dict
                 result.created_at.isoformat()
             )
         )
@@ -45,19 +48,23 @@ class ResultRepository:
         return last_id
 
     def save_xai(
-        self, 
-        result: XAIResult, 
-        detection_id: Optional[int], 
-        image_path: str, 
+        self,
+        result: XAIResult,
+        detection_id: Optional[int],
+        image_path: str,
         heatmap_path: str
     ) -> int:
         """
         Saves an XAIResult and returns its database ID.
+
+        Schema (xai_results):
+            id, explainer_method, detection_id, image_path, heatmap_path,
+            ai_deepfake, confidence, metrics, created_at
         """
         cursor = self.conn.cursor()
         cursor.execute(
             """
-            INSERT INTO xai_results 
+            INSERT INTO xai_results
             (explainer_method, detection_id, image_path, heatmap_path, ai_deepfake, confidence, metrics, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
@@ -66,7 +73,7 @@ class ResultRepository:
                 detection_id,
                 image_path,
                 heatmap_path,
-                result.ai_deepfake,
+                int(result.ai_deepfake),
                 result.confidence,
                 json.dumps(result.metrics),
                 result.created_at.isoformat()
@@ -76,52 +83,25 @@ class ResultRepository:
         last_id = cursor.lastrowid
         logger.info(f"[DB] Saved XAIResult {result.method_used} to DB (ID: {last_id})")
         return last_id
-    
-    def get_all_detections(self) -> list[DetectionResult]:
-        """
-        Returns all detection results from the SQLite database.
-        """
+
+    def get_all_detections(self) -> list:
+        """Returns all detection results as raw Row objects."""
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM detection_results ORDER BY created_at DESC")
+        return cursor.fetchall()
+
+    def get_all_xai(self) -> list:
+        """Returns all XAI results as raw Row objects."""
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM xai_results ORDER BY created_at DESC")
+        return cursor.fetchall()
+
+    def get_xai_for_detection(self, detection_id: int) -> list:
+        """Returns all XAI results linked to a given detection run."""
         cursor = self.conn.cursor()
         cursor.execute(
-            """
-            SELECT * FROM detection_results
-            """
+            "SELECT * FROM xai_results WHERE detection_id = ? ORDER BY created_at DESC",
+            (detection_id,)
         )
         return cursor.fetchall()
 
-    def get_all_xai(self) -> list[XAIResult]:
-        """
-        Returns all XAI results from the SQLite database.
-        """
-        cursor = self.conn.cursor()
-        cursor.execute(
-            """
-            SELECT * FROM xai_results
-            """
-        )
-        return cursor.fetchall()
-
-    def get_by_id(self, id: int) -> dict:
-        """
-        Returns a single result by its ID.
-        """
-        cursor = self.conn.cursor()
-        cursor.execute(
-            """
-            SELECT * FROM results WHERE id = ?
-            """,
-            (id,)
-        )
-        return cursor.fetchone()
-
-    def get_all(self) -> list[dict]:
-        """
-        Returns all results from the SQLite database.
-        """
-        cursor = self.conn.cursor()
-        cursor.execute(
-            """
-            SELECT * FROM results
-            """
-        )
-        return cursor.fetchall()

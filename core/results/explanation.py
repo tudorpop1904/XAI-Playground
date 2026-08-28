@@ -47,6 +47,8 @@ class XAIResult(Result):
         super().__init__(**kwargs)
         
         self.method_used: str = self.explainer.method_name
-        self.metrics["forward_passes"] = kwargs.get("forward_passes", 0)
-        self.metrics["stability_score"] = kwargs.get("stability_score", 0.0)
-        self.metrics["cell_scores"] = kwargs.get("cell_scores", {})
+        
+        # Merge any explicitly passed metric kwargs into self.metrics without hardcoded dummy defaults
+        for key in ("forward_passes", "cell_scores", "sobol_indices"):
+            if key in kwargs and key not in self.metrics:
+                self.metrics[key] = kwargs[key]

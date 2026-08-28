@@ -123,17 +123,18 @@ async def analyze_image(
         "stability": stability
     })
 
-    # Save XAIResult to disk for persistence
+    # Save DetectionResult and XAIResult to disk/DB for persistence
     conn = get_connection()
     try:
         repo = ResultRepository(conn)
+        detection_id = repo.save_detection(detection, str(tensor_path))
         repo.save_xai(
-            explanation,  # Pass the actual XAIResult domain object
-            None,         # detection_id is None for now
+            explanation,
+            detection_id,
             str(tensor_path),
             str(heatmap_path)
         )
-        logger.info(f"Results successfully persisted to SQLite database.")
+        logger.info(f"Results successfully persisted to SQLite database (Detection ID: {detection_id}).")
     except Exception as e:
         logger.error(f"Failed to persist results to database: {e}")
         raise

@@ -1,12 +1,31 @@
 import json
 import sqlite3
-from typing import Optional
+from typing import Optional, Any, Dict, List
 
 from core.results.detection import DetectionResult
 from core.results.explanation import XAIResult
 from core.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def _row_to_dict(row: sqlite3.Row) -> Dict[str, Any]:
+    """Helper to convert a sqlite3.Row to a dictionary and parse JSON fields."""
+    d = dict(row)
+    if "ai_deepfake" in d and d["ai_deepfake"] is not None:
+        d["ai_deepfake"] = bool(d["ai_deepfake"])
+    if "probabilities" in d and isinstance(d["probabilities"], str):
+        try:
+            d["probabilities"] = json.loads(d["probabilities"])
+        except Exception:
+            pass
+    if "metrics" in d and isinstance(d["metrics"], str):
+        try:
+            d["metrics"] = json.loads(d["metrics"])
+        except Exception:
+            pass
+    return d
+
 
 class ResultRepository:
     """
@@ -17,7 +36,7 @@ class ResultRepository:
     def __init__(self, conn: sqlite3.Connection):
         self.conn = conn
 
-    def save_detection(self, result: DetectionResult, image_path: str) -> int:
+    def save_detection(self, result: DetectionResult, image_path: Optional[str] = None) -> int:
         """
         Saves a DetectionResult and returns its database ID.
 
@@ -25,6 +44,7 @@ class ResultRepository:
             id, model_name, image_path, ai_deepfake, confidence,
             probabilities, metrics, created_at
         """
+        img_path = image_path or getattr(result, "image", "")
         cursor = self.conn.cursor()
         cursor.execute(
             """
@@ -34,11 +54,11 @@ class ResultRepository:
             """,
             (
                 result.model_name,
-                image_path,
+                img_path,
                 int(result.ai_deepfake),
                 result.confidence,
-                json.dumps(result.returned_obj),   # probabilities tensor/list
-                json.dumps(result.metrics),         # timing/RAM/eval metrics dict
+                json.dumps(result.returned_obj),   # probabilities tensor/dict
+                json.dumps(result.metrics),         # timing/eval metrics dict
                 result.created_at.isoformat()
             )
         )
@@ -51,8 +71,8 @@ class ResultRepository:
         self,
         result: XAIResult,
         detection_id: Optional[int],
-        image_path: str,
-        heatmap_path: str
+        image_path: Optional[str] = None,
+        heatmap_path: Optional[str] = None
     ) -> int:
         """
         Saves an XAIResult and returns its database ID.
@@ -61,6 +81,8 @@ class ResultRepository:
             id, explainer_method, detection_id, image_path, heatmap_path,
             ai_deepfake, confidence, metrics, created_at
         """
+        img_path = image_path or getattr(result, "image", "")
+        heat_path = heatmap_path or ""
         cursor = self.conn.cursor()
         cursor.execute(
             """
@@ -71,8 +93,8 @@ class ResultRepository:
             (
                 result.method_used,
                 detection_id,
-                image_path,
-                heatmap_path,
+                img_path,
+                heat_path,
                 int(result.ai_deepfake),
                 result.confidence,
                 json.dumps(result.metrics),
@@ -84,24 +106,39 @@ class ResultRepository:
         logger.info(f"[DB] Saved XAIResult {result.method_used} to DB (ID: {last_id})")
         return last_id
 
-    def get_all_detections(self) -> list:
-        """Returns all detection results as raw Row objects."""
+    def get_all_detections(self) -> List[Dict[str, Any]]:
+        """Returns all detection results as clean dictionaries."""
         cursor = self.conn.cursor()
         cursor.execute("SELECT * FROM detection_results ORDER BY created_at DESC")
-        return cursor.fetchall()
+        return [_row_to_dict(row) for row in cursor.fetchall()]
 
-    def get_all_xai(self) -> list:
-        """Returns all XAI results as raw Row objects."""
+    def get_all_xai(self) -> List[Dict[str, Any]]:
+        """Returns all XAI results as clean dictionaries."""
         cursor = self.conn.cursor()
         cursor.execute("SELECT * FROM xai_results ORDER BY created_at DESC")
-        return cursor.fetchall()
+        return [_row_to_dict(row) for row in cursor.fetchall()]
 
-    def get_xai_for_detection(self, detection_id: int) -> list:
+    def get_detection_by_id(self, detection_id: int) -> Optional[Dict[str, Any]]:
+        """Returns a single detection result by ID."""
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM detection_results WHERE id = ?", (detection_id,))
+        row = cursor.fetchone()
+        return _row_to_dict(row) if row else None
+
+    def get_xai_by_id(self, xai_id: int) -> Optional[Dict[str, Any]]:
+        """Returns a single XAI result by ID."""
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM xai_results WHERE id = ?", (xai_id,))
+        row = cursor.fetchone()
+        return _row_to_dict(row) if row else None
+
+    def get_xai_for_detection(self, detection_id: int) -> List[Dict[str, Any]]:
         """Returns all XAI results linked to a given detection run."""
         cursor = self.conn.cursor()
         cursor.execute(
             "SELECT * FROM xai_results WHERE detection_id = ? ORDER BY created_at DESC",
             (detection_id,)
         )
-        return cursor.fetchall()
+        return [_row_to_dict(row) for row in cursor.fetchall()]
+
 

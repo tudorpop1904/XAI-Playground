@@ -18,25 +18,6 @@ def init_db():
     conn = get_connection()
     cursor = conn.cursor()
 
-    # Models table
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS models (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL UNIQUE,
-            architecture TEXT NOT NULL,
-            hyperparameters TEXT,
-            weights_path TEXT NOT NULL,
-            created_at TEXT NOT NULL
-        )
-    """)
-
-    # Explainers table
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS explainers (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL UNIQUE
-        )
-    """)
 
     # Detection Results table
     cursor.execute("""

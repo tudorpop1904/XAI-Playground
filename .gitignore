@@ -59,7 +59,8 @@ Thumbs.db
 # ==============================
 export/
 edge/
-scripts/
+scripts/*
+!scripts/benchmark_hardware.py
 manim/
 *.tex
 ground-up.md

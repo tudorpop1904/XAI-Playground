@@ -58,7 +58,6 @@ pipeline {
             steps {
                 echo "Deploying locally via Docker Compose..."
                 sh """
-                    docker compose pull || true
                     docker compose up -d --build
                     echo "Local deployment complete."
                 """

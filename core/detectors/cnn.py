@@ -475,6 +475,20 @@ class CNNDetector(AbstractBaseDetector):
         return logits
 
     # ═══════════════════════════════════════════════════════════════
+    # Transfer Learning Helpers
+    # ═══════════════════════════════════════════════════════════════
+
+    def freeze_backbone(self, freeze: bool = True) -> None:
+        """
+        Freezes or unfreezes the lower convolutional layers for transfer learning / fine-tuning.
+        When frozen, only Conv Block 4 and the Classification Head are trained.
+        """
+        for module in [self.feature_adapter, self.block1, self.block2, self.block3]:
+            for param in module.parameters():
+                param.requires_grad = not freeze
+        logger.info(f"[{self.__class__.__name__}] Transfer Learning: Backbone {'frozen' if freeze else 'unfrozen'}.")
+
+    # ═══════════════════════════════════════════════════════════════
     # Single-Image Inference
     # ═══════════════════════════════════════════════════════════════
 
@@ -578,75 +592,21 @@ class CNNDetector(AbstractBaseDetector):
         val_loader: Optional[DataLoader] = None,
         epochs: int = 10,
         learning_rate: float = 1e-3,
+        freeze_backbone: bool = False,
     ) -> dict[str, list[float]]:
-        """
-        Train the CNN on a dataset.
-
-        THE TRAINING LOOP, ANNOTATED
-        ----------------------------
-        For each epoch (one full pass through the dataset):
-          1. Set model to training mode (enables dropout + batch norm)
-          2. For each mini-batch of (images, labels):
-             a. zero_grad()   — clear gradients from the previous step
-             b. forward pass  — compute predictions
-             c. loss          — measure how wrong the predictions are
-             d. backward()    — compute gradients via backpropagation
-             e. step()        — update weights using the gradients
-          3. (Optional) Evaluate on validation set
-
-        LOSS FUNCTION: CrossEntropyLoss
-        --------------------------------
-        Combines LogSoftmax + NLLLoss in a single, numerically stable
-        operation. For binary classification:
-
-            L = -log(P(correct_class))
-
-        If the model predicts P(AI) = 0.9 and the true label IS AI:
-            L = -log(0.9) = 0.105  (low loss, good prediction)
-
-        If the model predicts P(AI) = 0.1 and the true label IS AI:
-            L = -log(0.1) = 2.303  (high loss, bad prediction)
-
-        OPTIMIZER: Adam
-        ----------------
-        Maintains per-parameter running averages of:
-          - m: gradient momentum (exponential moving average of gradients)
-          - v: squared gradient (adaptive learning rate per parameter)
-
-        Update rule:
-            m_t = β₁ · m_{t-1} + (1 - β₁) · g_t
-            v_t = β₂ · v_{t-1} + (1 - β₂) · g_t²
-            θ_t = θ_{t-1} - lr · m̂_t / (√v̂_t + ε)
-
-        Parameters
-        ----------
-        train_loader : DataLoader
-            Yields (images, labels) batches. Images: [B, 3, H, W].
-            Labels: [B] with values in {0, 1}.
-        val_loader : DataLoader or None
-            Optional validation set for tracking generalisation.
-        epochs : int
-            Number of full passes through the training set.
-        learning_rate : float
-            Step size for the Adam optimiser.
-
-        Returns
-        -------
-        dict[str, list[float]]
-            Training history with keys:
-              "train_loss"  — average loss per epoch
-              "train_acc"   — accuracy per epoch
-              "val_loss"    — (if val_loader) validation loss per epoch
-              "val_acc"     — (if val_loader) validation accuracy per epoch
-        """
         # Move model to device
         self.to(device)
 
+        if freeze_backbone:
+            self.freeze_backbone(True)
+            optimizer = torch.optim.Adam(
+                filter(lambda p: p.requires_grad, self.parameters()), lr=learning_rate
+            )
+        else:
+            optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate)
+
         # Loss function: see docstring above for the math
         criterion = nn.CrossEntropyLoss()
-
-        # Optimizer: Adam with the specified learning rate
-        optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate)
 
         # History dictionary to track metrics across epochs
         history: dict[str, list[float]] = {

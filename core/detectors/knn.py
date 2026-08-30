@@ -294,6 +294,7 @@ class KNNDetector(AbstractBaseDetector):
         k: int = 5,
         metric: Literal["cosine", "euclidean"] = "cosine",
         num_classes: int = 2,
+        backbone: str = "resnet18",
     ) -> None:
         super().__init__(name=f"KNN_{KNNDetector.index}")
         KNNDetector.index += 1
@@ -302,18 +303,16 @@ class KNNDetector(AbstractBaseDetector):
         self.k = k
         self.metric = metric
         self.num_classes = num_classes
+        self.backbone_name = backbone
 
         # ----------------------------------------------------------------
-        # STAGE 0: Feature Extractor (Frozen ResNet-18)
+        # STAGE 0: Feature Extractor (Representation Transfer Backbone)
         # ----------------------------------------------------------------
-        #
-        # The backbone is the only nn.Module in this detector.
-        # All its parameters are frozen — no gradients ever flow
-        # through it during our "training" (which is just feature
-        # extraction, not backpropagation).
+        # Supports: 'resnet18' (ImageNet), 'ftl_cnn' (Forensic), 'vit' (Attention)
         # ----------------------------------------------------------------
-        self.backbone = ResNetFeatureExtractor(
-            normalize=(metric == "cosine")
+        from core.detectors.feature_extractors import get_feature_extractor
+        self.backbone = get_feature_extractor(
+            backbone, normalize=(metric == "cosine")
         )
 
         # ----------------------------------------------------------------

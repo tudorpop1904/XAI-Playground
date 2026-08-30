@@ -18,6 +18,7 @@ class TrainRequest(BaseModel):
     epochs: int = 1
     batch_size: int = 16
     learning_rate: float = 1e-3
+    freeze_backbone: bool = False
 
 @router.post("/models/train")
 def train_model(req: TrainRequest):
@@ -61,10 +62,14 @@ def train_model(req: TrainRequest):
             model = CNNDetector(num_classes=2)
             model.name = req.model_name
             
-        model.to(device)
-        
-        # Train
-        history = model.train_model(train_loader, val_loader, epochs=req.epochs, learning_rate=req.learning_rate)
+        # Train (pass freeze_backbone if supported)
+        import inspect
+        sig = inspect.signature(model.train_model)
+        train_kwargs = {"epochs": req.epochs, "learning_rate": req.learning_rate}
+        if "freeze_backbone" in sig.parameters:
+            train_kwargs["freeze_backbone"] = req.freeze_backbone
+            
+        history = model.train_model(train_loader, val_loader, **train_kwargs)
         
         # Save model
         MODELS_DIR = Path("storage/models")

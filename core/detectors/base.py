@@ -92,17 +92,19 @@ class AbstractBaseDetector(ABC, nn.Module):
         from core.detectors.cnn import CNNDetector
         from core.detectors.vit import ViTDetector
         from core.detectors.knn import KNNDetector
+        from core.detectors.kmc import KMCDetector
 
         DETECTORS = {
             "CNN": CNNDetector,
             "VIT": ViTDetector,
-            "KNN": KNNDetector
+            "KNN": KNNDetector,
+            "KMC": KMCDetector,
         }
 
         model = DETECTORS.get(detector_type.upper())
 
         if model is None:
-            raise ValueError("Detector type not found")
+            raise ValueError(f"Detector type '{detector_type}' not found. Supported: {list(DETECTORS.keys())}")
 
         return model
     

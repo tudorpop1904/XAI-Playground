@@ -44,20 +44,47 @@ logger = logging.getLogger("TrainingPipeline")
 
 
 def get_dataset_index(dataset_slug: str) -> Path:
-    """Finds or validates the index JSON for the given dataset slug."""
+    """Finds or automatically downloads and indexes the dataset if missing."""
     dataset_name = dataset_slug.split("/")[-1]
+    DATASETS_DIR.mkdir(parents=True, exist_ok=True)
     index_path = DATASETS_DIR / f"{dataset_name}_index.json"
     
-    if not index_path.exists():
-        # Fallback search for any available index
-        available = list(DATASETS_DIR.glob("*_index.json"))
-        if available:
-            logger.warning(f"Requested index {index_path.name} not found. Using available: {available[0].name}")
-            return available[0]
-        raise FileNotFoundError(
-            f"Dataset index not found at {index_path}. "
-            "Please download/prepare the dataset via UI or API first."
-        )
+    if index_path.exists():
+        logger.info(f"Found existing dataset index at: {index_path}")
+        return index_path
+
+    # Check for any other index fallback
+    available = list(DATASETS_DIR.glob("*_index.json"))
+    if available:
+        logger.warning(f"Requested index {index_path.name} not found. Found local index: {available[0].name}")
+        return available[0]
+
+    # Auto-prepare dataset via kagglehub
+    logger.info(f"Index not found. Automatically downloading '{dataset_slug}' via kagglehub...")
+    import kagglehub
+    dpath_str = kagglehub.dataset_download(dataset_slug, force_download=False)
+    dpath = Path(dpath_str)
+    logger.info(f"Dataset downloaded to cache at: {dpath}")
+
+    # Gather real and fake image files
+    real_images = list(dpath.rglob("*real*/*.jpg")) + list(dpath.rglob("*real*/*.png"))
+    fake_images = list(dpath.rglob("*fake*/*.jpg")) + list(dpath.rglob("*fake*/*.png")) + list(dpath.rglob("*ai*/*.jpg"))
+    
+    if not real_images or not fake_images:
+        all_imgs = list(dpath.rglob("*.jpg")) + list(dpath.rglob("*.png"))
+        half = len(all_imgs) // 2
+        real_images = all_imgs[:half]
+        fake_images = all_imgs[half:]
+
+    index_data = {
+        "real": [str(p.resolve()) for p in real_images],
+        "fake": [str(p.resolve()) for p in fake_images],
+    }
+
+    with open(index_path, "w", encoding="utf-8") as f:
+        json.dump(index_data, f)
+
+    logger.info(f"Generated new index at {index_path} ({len(real_images)} Real, {len(fake_images)} Fake)")
     return index_path
 
 

@@ -319,10 +319,8 @@ class MultiHeadSelfAttention(nn.Module):
         attn = self.attn_drop(attn)
 
         # Step 3: Weighted sum of values
-        # [B, H, N, N] . [B, H, N, d_k] -> [B, H, N, d_k]
-        x = torch.tensordot(attn, v, dims=3)
-        x = x.permute(0, 2, 1, 3)
-        x = x.reshape(B, N, D)
+        # [B, H, N, N] @ [B, H, N, d_k] -> [B, H, N, d_k]
+        x = (attn @ v).transpose(1, 2).reshape(B, N, D)
 
         # Step 4: Output projection
         x = self.proj(x)
@@ -1120,3 +1118,13 @@ class ViTDetector(AbstractBaseDetector):
         summary_str = "\n".join(lines)
         print(summary_str)
         return summary_str
+
+    def get_target_layer(self) -> Optional[nn.Module]:
+        """
+        Return the last Transformer block for feature/activation hooks.
+        """
+        return self.blocks[-1]
+
+
+# Backward-compatibility alias
+VisionTransformer = ViTDetector

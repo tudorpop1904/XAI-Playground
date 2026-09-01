@@ -827,3 +827,13 @@ class CNNDetector(AbstractBaseDetector):
         summary_str = "\n".join(lines)
         print(summary_str)
         return summary_str
+
+    def get_target_layer(self) -> Optional[nn.Module]:
+        """
+        Return the last convolutional layer (Block 4 Conv2d) for Grad-CAM.
+        """
+        return self.block4[0]
+
+
+# Backward-compatibility alias
+FakeDetectorCNN = CNNDetector

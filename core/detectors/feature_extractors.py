@@ -14,7 +14,7 @@ This implements Cross-Architecture Representation Transfer:
 """
 
 from __future__ import annotations
-from typing import Literal, Optional
+from typing import Literal
 
 import torch
 import torch.nn as nn
@@ -122,21 +122,17 @@ class FTLFeatureExtractor(nn.Module):
         self.target_layer = self.conv4
 
     def _enrich_features(self, x: torch.Tensor) -> torch.Tensor:
-        """Appends FFT, LBP, and Sobel channels to RGB input."""
-        device = x.device
-        b, _, h, w = x.shape
-        extra_channels = []
+        """Appends FFT, LBP, and Sobel channels to RGB input using pure PyTorch tensors."""
+        enriched = []
+        for i in range(x.shape[0]):
+            img = x[i]
+            fft_ch = compute_fft(img)      # [1, H, W]
+            lbp_ch = compute_lbp(img)      # [1, H, W]
+            sobel_ch = compute_sobel(img)  # [1, H, W]
+            combined = torch.cat([img, fft_ch, lbp_ch, sobel_ch], dim=0)  # [6, H, W]
+            enriched.append(combined)
 
-        for i in range(b):
-            img_np = x[i].permute(1, 2, 0).cpu().numpy()
-            fft_ch = torch.from_numpy(compute_fft(img_np)).float().unsqueeze(0)
-            lbp_ch = torch.from_numpy(compute_lbp(img_np)).float().unsqueeze(0)
-            sobel_ch = torch.from_numpy(compute_sobel(img_np)).float().unsqueeze(0)
-            combined = torch.cat([fft_ch, lbp_ch, sobel_ch], dim=0)
-            extra_channels.append(combined.unsqueeze(0))
-
-        extra_tensor = torch.cat(extra_channels, dim=0).to(device)
-        return torch.cat([x, extra_tensor], dim=1)
+        return torch.stack(enriched, dim=0)
 
     @torch.inference_mode()
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -170,8 +166,8 @@ class ViTFeatureExtractor(nn.Module):
         self.normalize = normalize
         self.feat_dim = embed_dim
 
-        from core.detectors.vit import VisionTransformer
-        self.vit = VisionTransformer(
+        from core.detectors.vit import ViTDetector
+        self.vit = ViTDetector(
             img_size=224,
             patch_size=16,
             embed_dim=embed_dim,

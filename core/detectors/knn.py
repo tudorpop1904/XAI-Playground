@@ -884,3 +884,9 @@ class KNNDetector(AbstractBaseDetector):
         summary_str = "\n".join(lines)
         print(summary_str)
         return summary_str
+
+    def get_target_layer(self) -> Optional[nn.Module]:
+        """
+        Return the target layer of the underlying feature extraction backbone.
+        """
+        return getattr(self.backbone, "target_layer", None)

@@ -14,7 +14,7 @@ if not st.session_state.get("dataset_path"):
     
 st.markdown("Select an architecture and train it on your prepared dataset.")
 
-model_type = st.selectbox("Model Architecture", ["CNN", "ViT", "KNN"])
+model_type = st.selectbox("Model Architecture", ["CNN", "ViT", "KNN", "KMC"])
 
 # Fetch available models
 available_models = []
@@ -40,9 +40,15 @@ if action == "Use Existing Model" and arch_models:
     
     hist = selected_model.get("history", {})
     if hist:
-        col1, col2 = st.columns(2)
-        col1.metric("Train Accuracy", f"{hist['train_acc'][-1]:.2%}")
-        col2.metric("Train Loss", f"{hist['train_loss'][-1]:.4f}")
+        specs = hist.get("specs", {})
+        col1, col2, col3 = st.columns(3)
+        if "train_acc" in hist and hist["train_acc"]:
+            col1.metric("Train Accuracy", f"{hist['train_acc'][-1]:.2%}")
+        if "train_loss" in hist and hist["train_loss"]:
+            col2.metric("Train Loss", f"{hist['train_loss'][-1]:.4f}")
+        if specs:
+            channels = specs.get("input_channels", 3)
+            col3.metric("Input Channels", f"{channels} (RGB{' + FFT' if specs.get('add_fft') else ''}{' + LBP' if specs.get('add_lbp') else ''}{' + Sobel' if specs.get('add_sobel') else ''})")
         
 elif action == "Train New Model":
     # Generate next index for the model name
@@ -50,6 +56,26 @@ elif action == "Train New Model":
     model_name = f"{model_type}_Model_{next_index}"
     st.info(f"Will train a new model named: **{model_name}**")
     
+    # Forensic Channels Selection (Specific to CNN Early Fusion)
+    add_fft = False
+    add_lbp = False
+    add_sobel = False
+    
+    if model_type == "CNN":
+        st.markdown("#### 🔬 Forensic Feature Channels (Faster-Than-Lies)")
+        st.caption("Choose which additional mathematical filters to prepend to the 3 RGB channels:")
+        col_fft, col_lbp, col_sobel = st.columns(3)
+        add_fft = col_fft.checkbox("FFT 2D Magnitude", value=False, help="Fast Fourier Transform channel to detect high-frequency artifacts and upsampling checkerboards.")
+        add_lbp = col_lbp.checkbox("LBP Texture", value=False, help="Local Binary Pattern channel to detect unnatural skin and surface micro-texture smoothness.")
+        add_sobel = col_sobel.checkbox("Sobel Edge Filter", value=False, help="Sobel gradient magnitude channel to detect border bleed and structural discontinuities.")
+        
+        num_channels = 3 + int(add_fft) + int(add_lbp) + int(add_sobel)
+        ch_labels = ["RGB (3)"]
+        if add_fft: ch_labels.append("FFT (1)")
+        if add_lbp: ch_labels.append("LBP (1)")
+        if add_sobel: ch_labels.append("Sobel (1)")
+        st.caption(f"Input Tensor Shape: `[{num_channels}, 128, 128]` ({' + '.join(ch_labels)})")
+
     st.markdown("#### Hyperparameters")
     col1, col2, col3 = st.columns(3)
     epochs = col1.slider("Epochs", min_value=1, max_value=50, value=1)
@@ -59,15 +85,20 @@ elif action == "Train New Model":
     if st.button("Train Model", type="primary"):
         with st.spinner(f"Training {model_name} on {st.session_state.dataset_slug}..."):
             try:
+                payload = {
+                    "model_name": model_name,
+                    "dataset_slug": st.session_state.dataset_slug,
+                    "epochs": epochs,
+                    "batch_size": batch_size,
+                    "learning_rate": learning_rate,
+                    "model_type": model_type,
+                    "add_fft": add_fft,
+                    "add_lbp": add_lbp,
+                    "add_sobel": add_sobel,
+                }
                 res = requests.post(
                     f"{API_BASE_URL}/api/v1/models/train",
-                    json={
-                        "model_name": model_name,
-                        "dataset_slug": st.session_state.dataset_slug,
-                        "epochs": epochs,
-                        "batch_size": batch_size,
-                        "learning_rate": learning_rate
-                    }
+                    json=payload
                 )
                 
                 if res.status_code == 200:
@@ -80,8 +111,10 @@ elif action == "Train New Model":
                     hist = data.get("history", {})
                     if hist:
                         col1, col2 = st.columns(2)
-                        col1.metric("Final Train Accuracy", f"{hist['train_acc'][-1]:.2%}")
-                        col2.metric("Final Train Loss", f"{hist['train_loss'][-1]:.4f}")
+                        if "train_acc" in hist and hist["train_acc"]:
+                            col1.metric("Final Train Accuracy", f"{hist['train_acc'][-1]:.2%}")
+                        if "train_loss" in hist and hist["train_loss"]:
+                            col2.metric("Final Train Loss", f"{hist['train_loss'][-1]:.4f}")
                 else:
                     st.error(f"Training failed: {res.text}")
                     

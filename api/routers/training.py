@@ -19,11 +19,15 @@ class TrainRequest(BaseModel):
     batch_size: int = 16
     learning_rate: float = 1e-3
     freeze_backbone: bool = False
+    model_type: str = "CNN"
+    add_fft: bool = False
+    add_lbp: bool = False
+    add_sobel: bool = False
 
 @router.post("/models/train")
 def train_model(req: TrainRequest):
     """
-    Train a model on a pre-prepared dataset subset.
+    Train a model on a pre-prepared dataset subset with custom forensic channels.
     """
     dataset_name = req.dataset_slug.split("/")[-1]
     index_path = Path("storage/datasets") / f"{dataset_name}_index.json"
@@ -54,12 +58,33 @@ def train_model(req: TrainRequest):
         val_loader = DataLoader(val_dataset, batch_size=req.batch_size, shuffle=False)
         
         # Instantiate model if it's a new one, or load it
-        # For this demonstration, we'll instantiate a fresh CNN if requested, or load if exists
         try:
             model = AbstractBaseDetector.get_by_name(req.model_name)
         except Exception:
-            # If not found, create a fresh one (Assuming CNN for now)
-            model = CNNDetector(num_classes=2)
+            m_type = (req.model_type or req.model_name.split("_")[0]).upper()
+            if m_type == "CNN":
+                model = CNNDetector(
+                    num_classes=2,
+                    add_fft=req.add_fft,
+                    add_lbp=req.add_lbp,
+                    add_sobel=req.add_sobel,
+                )
+            elif m_type == "VIT":
+                from core.detectors.vit import ViTDetector
+                model = ViTDetector()
+            elif m_type == "KNN":
+                from core.detectors.knn import KNNDetector
+                model = KNNDetector()
+            elif m_type == "KMC":
+                from core.detectors.kmc import KMCDetector
+                model = KMCDetector()
+            else:
+                model = CNNDetector(
+                    num_classes=2,
+                    add_fft=req.add_fft,
+                    add_lbp=req.add_lbp,
+                    add_sobel=req.add_sobel,
+                )
             model.name = req.model_name
             
         # Train (pass freeze_backbone if supported)
@@ -76,8 +101,16 @@ def train_model(req: TrainRequest):
         MODELS_DIR.mkdir(parents=True, exist_ok=True)
         torch.save(model, MODELS_DIR / f"{req.model_name}.pth")
         
-        # Save training history metadata
-        import json
+        # Save training history metadata and channel configuration
+        if isinstance(history, dict):
+            history["specs"] = {
+                "model_type": getattr(model, "__class__", type(model)).__name__,
+                "add_fft": getattr(model, "add_fft", False),
+                "add_lbp": getattr(model, "add_lbp", False),
+                "add_sobel": getattr(model, "add_sobel", False),
+                "input_channels": getattr(model, "input_channels", 3),
+            }
+
         with open(MODELS_DIR / f"{req.model_name}.json", "w") as f:
             json.dump(history, f)
             

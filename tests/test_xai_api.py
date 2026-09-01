@@ -1,8 +1,5 @@
 import requests
-import json
-import os
 import io
-from pathlib import Path
 from PIL import Image
 
 API_URL = "http://localhost:8000/api/v1/analyze"

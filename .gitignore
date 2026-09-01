@@ -61,6 +61,7 @@ export/
 edge/
 scripts/*
 !scripts/benchmark_hardware.py
+!scripts/train_vit_knn_pipeline.py
 manim/
 *.tex
 ground-up.md
@@ -69,3 +70,4 @@ client_server_architecture.tex
 test_enhancer.py
 test_img.pt
 prezentare.md
+storage/models/training_specs.txt

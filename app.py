@@ -31,3 +31,5 @@ if "xai_results" not in st.session_state:
     st.session_state.xai_results = []
 if "detection_result" not in st.session_state:
     st.session_state.detection_result = None
+
+st.switch_page("pages/1_Home.py")

@@ -23,6 +23,9 @@ class TrainRequest(BaseModel):
     add_fft: bool = False
     add_lbp: bool = False
     add_sobel: bool = False
+    knn_k: int = 5
+    knn_metric: str = "cosine"
+    knn_backbone: str = "resnet18"
 
 @router.post("/models/train")
 def train_model(req: TrainRequest):
@@ -74,10 +77,11 @@ def train_model(req: TrainRequest):
                 model = ViTDetector()
             elif m_type == "KNN":
                 from core.detectors.knn import KNNDetector
-                model = KNNDetector()
-            elif m_type == "KMC":
-                from core.detectors.kmc import KMCDetector
-                model = KMCDetector()
+                model = KNNDetector(
+                    k=req.knn_k,
+                    metric=req.knn_metric,
+                    backbone=req.knn_backbone,
+                )
             else:
                 model = CNNDetector(
                     num_classes=2,

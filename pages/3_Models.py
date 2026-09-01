@@ -14,7 +14,7 @@ if not st.session_state.get("dataset_path"):
     
 st.markdown("Select an architecture and train it on your prepared dataset.")
 
-model_type = st.selectbox("Model Architecture", ["CNN", "ViT", "KNN", "KMC"])
+model_type = st.selectbox("Model Architecture", ["CNN", "ViT", "KNN"])
 
 # Fetch available models
 available_models = []
@@ -60,6 +60,12 @@ elif action == "Train New Model":
     add_fft = False
     add_lbp = False
     add_sobel = False
+    knn_k = 5
+    knn_metric = "cosine"
+    knn_backbone = "resnet18"
+    epochs = 1
+    learning_rate = 0.001
+    batch_size = 16
     
     if model_type == "CNN":
         st.markdown("#### 🔬 Forensic Feature Channels (Faster-Than-Lies)")
@@ -76,11 +82,29 @@ elif action == "Train New Model":
         if add_sobel: ch_labels.append("Sobel (1)")
         st.caption(f"Input Tensor Shape: `[{num_channels}, 128, 128]` ({' + '.join(ch_labels)})")
 
-    st.markdown("#### Hyperparameters")
-    col1, col2, col3 = st.columns(3)
-    epochs = col1.slider("Epochs", min_value=1, max_value=50, value=1)
-    batch_size = col2.slider("Batch Size", min_value=4, max_value=128, value=16, step=4)
-    learning_rate = col3.number_input("Learning Rate", min_value=0.00001, max_value=0.1, value=0.001, step=0.0001, format="%.5f")
+        st.markdown("#### Hyperparameters")
+        col1, col2, col3 = st.columns(3)
+        epochs = col1.slider("Epochs", min_value=1, max_value=50, value=1)
+        batch_size = col2.slider("Batch Size", min_value=4, max_value=128, value=16, step=4)
+        learning_rate = col3.number_input("Learning Rate", min_value=0.00001, max_value=0.1, value=0.001, step=0.0001, format="%.5f")
+
+    elif model_type == "ViT":
+        st.markdown("#### Hyperparameters")
+        col1, col2, col3 = st.columns(3)
+        epochs = col1.slider("Epochs", min_value=1, max_value=50, value=1)
+        batch_size = col2.slider("Batch Size", min_value=4, max_value=128, value=16, step=4)
+        learning_rate = col3.number_input("Learning Rate", min_value=0.00001, max_value=0.1, value=0.001, step=0.0001, format="%.5f")
+
+    elif model_type == "KNN":
+        st.info("💡 **k-NN este un model non-parametric bazat pe memorie.** Antrenarea constă într-o **singură trecere rapidă** (Single Pass) de extragere și memorare a vectorilor latenți. Nu necesită epoci sau optimizator de gradient.")
+        st.markdown("#### k-NN Configuration")
+        col1, col2, col3 = st.columns(3)
+        knn_k = col1.slider("k (Număr Vecini)", min_value=1, max_value=25, value=5)
+        knn_metric = col2.selectbox("Metrică Distanță", ["cosine", "euclidean"])
+        knn_backbone = col3.selectbox("Backbone Trăsături", ["resnet18", "ftl_cnn", "vit"])
+        batch_size = st.slider("Batch Size Extracție", min_value=16, max_value=128, value=64, step=16)
+        epochs = 1
+        learning_rate = 0.0
     
     if st.button("Train Model", type="primary"):
         with st.spinner(f"Training {model_name} on {st.session_state.dataset_slug}..."):
@@ -95,6 +119,9 @@ elif action == "Train New Model":
                     "add_fft": add_fft,
                     "add_lbp": add_lbp,
                     "add_sobel": add_sobel,
+                    "knn_k": knn_k,
+                    "knn_metric": knn_metric,
+                    "knn_backbone": knn_backbone,
                 }
                 res = requests.post(
                     f"{API_BASE_URL}/api/v1/models/train",

@@ -599,50 +599,49 @@ class KNNDetector(AbstractBaseDetector):
 
         return history
 
-    def _leave_one_out_accuracy(self) -> float:
+    def _leave_one_out_accuracy(self, max_samples: int = 2000) -> float:
         """
-        Compute leave-one-out accuracy on the training set.
-
-        For each training sample, find its k nearest neighbours
-        EXCLUDING ITSELF, and check if the majority vote matches
-        its true label. This gives a more honest estimate of
-        generalisation than including the query in its own search.
-
-        Returns
-        -------
-        float
-            Leave-one-out accuracy in [0, 1].
+        Fast chunked leave-one-out accuracy without O(N^2) memory explosion.
         """
-        if self.train_features.shape[0] < self.k + 1:
+        N = self.train_features.shape[0]
+        if N < self.k + 1:
             return 0.0
 
-        # Compute all pairwise distances: [N, N]
-        distances = self._compute_distances(
-            self.train_features, self.train_features
-        )
+        # Sample up to max_samples for instantaneous validation
+        if N > max_samples:
+            indices = torch.randperm(N)[:max_samples]
+            queries = self.train_features[indices]
+            query_labels = self.train_labels[indices]
+        else:
+            indices = torch.arange(N)
+            queries = self.train_features
+            query_labels = self.train_labels
 
-        # Set self-distance to infinity so the query doesn't match itself
-        distances.fill_diagonal_(float("inf"))
+        correct = 0
+        total = queries.shape[0]
+        chunk_size = 500
 
-        # Find k nearest for each sample
-        k = min(self.k, self.train_features.shape[0] - 1)
-        _, top_indices = torch.topk(distances, k=k, dim=1, largest=False)
+        for i in range(0, total, chunk_size):
+            q_chunk = queries[i : i + chunk_size]
+            q_idx_chunk = indices[i : i + chunk_size]
+            
+            # Compute distance chunk [C, N]
+            dists = self._compute_distances(q_chunk, self.train_features)
+            
+            # Mask out self-distance
+            for r in range(q_chunk.shape[0]):
+                dists[r, q_idx_chunk[r]] = float("inf")
+                
+            # Top-k nearest neighbours
+            k = min(self.k, N - 1)
+            _, top_k_idx = torch.topk(dists, k=k, dim=1, largest=False)
+            nbr_labels = self.train_labels[top_k_idx]  # [C, k]
+            
+            # Majority vote
+            mode_labels, _ = torch.mode(nbr_labels, dim=1)
+            correct += (mode_labels == query_labels[i : i + chunk_size]).sum().item()
 
-        # Get neighbour labels and vote
-        neighbour_labels = self.train_labels[top_indices]  # [N, k]
-
-        # Hard majority vote (simpler for evaluation)
-        predicted = []
-        for i in range(neighbour_labels.shape[0]):
-            votes = neighbour_labels[i]
-            counts = torch.bincount(votes, minlength=self.num_classes)
-            predicted.append(counts.argmax().item())
-
-        predicted_tensor = torch.tensor(predicted, device=device)
-        correct = (predicted_tensor == self.train_labels).sum().item()
-        total = self.train_labels.shape[0]
-
-        return correct / total
+        return correct / total if total > 0 else 0.0
 
     # =====================================================================
     #  Validation / Evaluation

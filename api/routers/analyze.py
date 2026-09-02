@@ -35,17 +35,19 @@ import time
 
 logger = get_logger(__name__)
 
+from typing import Literal
+
 router = APIRouter(prefix="/api/v1")
 
 @router.post("/analyze")
 async def analyze_image(
-    file: UploadFile = File(...),
-    detector: str = Form(...),
-    explainer: str = Form(...),
-    enhance: bool = Form(False),
-    grid_rows: int = Form(4),
-    grid_cols: int = Form(4),
-    n_samples: int = Form(64)
+    file: UploadFile = File(..., description="Image file to analyze"),
+    detector: str = Form(..., min_length=1, description="Detector model name"),
+    explainer: Literal["grad_cam", "vanilla_saliency", "occlusion", "pmi", "sobol"] = Form(..., description="XAI method"),
+    enhance: bool = Form(False, description="Apply super-resolution before inference"),
+    grid_rows: int = Form(4, ge=2, le=16, description="Grid rows for perturbation methods (2-16)"),
+    grid_cols: int = Form(4, ge=2, le=16, description="Grid columns for perturbation methods (2-16)"),
+    n_samples: int = Form(64, ge=16, le=256, description="Number of Monte Carlo masks for Sobol (16-256)")
 ):
     from api.main import IMAGES
     

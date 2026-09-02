@@ -12,20 +12,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 
 router = APIRouter(prefix="/api/v1")
 
-class TrainRequest(BaseModel):
-    model_name: str
-    dataset_slug: str
-    epochs: int = 1
-    batch_size: int = 16
-    learning_rate: float = 1e-3
-    freeze_backbone: bool = False
-    model_type: str = "CNN"
-    add_fft: bool = False
-    add_lbp: bool = False
-    add_sobel: bool = False
-    knn_k: int = 5
-    knn_metric: str = "cosine"
-    knn_backbone: str = "resnet18"
+from api.schemas.requests import TrainRequest
 
 @router.post("/models/train")
 def train_model(req: TrainRequest):

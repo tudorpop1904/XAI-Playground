@@ -552,11 +552,12 @@ class KNNDetector(AbstractBaseDetector):
             all_features.append(features.cpu())
             all_labels.append(labels.cpu())
 
-            # Store images for XAI (on CPU to save GPU memory)
-            for img in images:
-                all_images.append(img.cpu())
+            # Store lightweight downscaled uint8 thumbnails for XAI (prevents 60GB RAM exhaustion)
+            thumbnails = (F.interpolate(images, size=(128, 128), mode="bilinear", align_corners=False) * 255.0).clamp(0, 255).to(torch.uint8).cpu()
+            for thumb in thumbnails:
+                all_images.append(thumb)
 
-            if (batch_idx + 1) % 10 == 0:
+            if (batch_idx + 1) % 50 == 0:
                 n = sum(f.shape[0] for f in all_features)
                 print(f"  Processed {n} images...")
 
@@ -805,8 +806,11 @@ class KNNDetector(AbstractBaseDetector):
             zip(top_indices.tolist(), top_distances.tolist()), start=1
         ):
             label_idx = self.train_labels[idx].item()
+            img_item = self.train_images[idx]
+            if isinstance(img_item, torch.Tensor) and img_item.dtype == torch.uint8:
+                img_item = img_item.float() / 255.0
             neighbors.append({
-                "image": self.train_images[idx],
+                "image": img_item,
                 "label": CLASS_NAMES[label_idx],
                 "distance": round(dist, 6),
                 "rank": rank,

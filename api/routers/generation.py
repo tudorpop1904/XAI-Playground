@@ -10,11 +10,7 @@ from core.utils.logger import get_logger
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/v1")
 
-class GenerateRequest(BaseModel):
-    prompt: str
-    mode: str = "cloud" # "cloud" or "local"
-    hf_token: str = ""
-    model_id: str = "runwayml/stable-diffusion-v1-5"
+from api.schemas.requests import GenerateRequest
 
 # Global cache for the local pipeline
 _local_pipeline = None

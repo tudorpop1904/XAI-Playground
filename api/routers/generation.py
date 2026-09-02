@@ -51,19 +51,23 @@ def generate_image(req: GenerateRequest):
         if not req.hf_token:
             raise HTTPException(status_code=400, detail="Hugging Face API token is required for cloud mode.")
             
-        api_url = f"https://api-inference.huggingface.co/models/{req.model_id}"
-        headers = {"Authorization": f"Bearer {req.hf_token}"}
-        
         try:
-            logger.info(f"Requesting HF API for prompt: {req.prompt}")
-            response = requests.post(api_url, headers=headers, json={"inputs": req.prompt})
-            if response.status_code != 200:
-                raise HTTPException(status_code=response.status_code, detail=response.text)
-                
-            image_bytes = response.content
-            image = Image.open(io.BytesIO(image_bytes))
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Cloud generation failed: {e}")
+            from huggingface_hub import InferenceClient
+            logger.info(f"Generating via huggingface_hub.InferenceClient with model: {req.model_id}")
+            client = InferenceClient(token=req.hf_token, timeout=120)
+            image = client.text_to_image(req.prompt, model=req.model_id)
+        except Exception as client_err:
+            logger.warning(f"InferenceClient text_to_image failed ({client_err}). Retrying via direct HTTPS request...")
+            api_url = f"https://api-inference.huggingface.co/models/{req.model_id}"
+            headers = {"Authorization": f"Bearer {req.hf_token}"}
+            try:
+                response = requests.post(api_url, headers=headers, json={"inputs": req.prompt}, timeout=120)
+                if response.status_code != 200:
+                    raise HTTPException(status_code=response.status_code, detail=response.text)
+                image_bytes = response.content
+                image = Image.open(io.BytesIO(image_bytes))
+            except Exception as req_err:
+                raise HTTPException(status_code=500, detail=f"Cloud generation failed: {req_err}")
             
     elif req.mode == "local":
         try:

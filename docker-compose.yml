@@ -27,6 +27,9 @@ services:
       - OLLAMA_HOST=http://ollama:11434
       - HF_HOME=/app/storage/.cache/huggingface
       - KAGGLEHUB_CACHE=/app/storage/.cache/kagglehub
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     networks:
       - playground_net
     depends_on:
@@ -59,6 +62,9 @@ services:
       - playground_storage:/app/storage
     environment:
       - API_BASE_URL=http://api:8000
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     networks:
       - playground_net
     depends_on:

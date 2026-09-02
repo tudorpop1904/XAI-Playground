@@ -104,7 +104,7 @@ elif action == "Train New Model":
         knn_backbone = col3.selectbox("Backbone Trăsături", ["resnet18", "ftl_cnn", "vit"])
         batch_size = st.slider("Batch Size Extracție", min_value=16, max_value=128, value=64, step=16)
         epochs = 1
-        learning_rate = 0.0
+        learning_rate = 0.001
     
     if st.button("Train Model", type="primary"):
         with st.spinner(f"Training {model_name} on {st.session_state.dataset_slug}..."):

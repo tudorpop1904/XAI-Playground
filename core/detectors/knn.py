@@ -552,16 +552,18 @@ class KNNDetector(AbstractBaseDetector):
             all_features.append(features.cpu())
             all_labels.append(labels.cpu())
 
-            # Store lightweight downscaled uint8 thumbnails for XAI (prevents 60GB RAM exhaustion)
-            thumbnails = (F.interpolate(images, size=(128, 128), mode="bilinear", align_corners=False) * 255.0).clamp(0, 255).to(torch.uint8).cpu()
-            for thumb in thumbnails:
-                all_images.append(thumb)
+            # Store up to 1000 exemplar thumbnails for UI preview without memory bloat
+            if len(all_images) < 1000:
+                thumbnails = (F.interpolate(images, size=(128, 128), mode="bilinear", align_corners=False) * 255.0).clamp(0, 255).to(torch.uint8).cpu()
+                for thumb in thumbnails:
+                    if len(all_images) < 1000:
+                        all_images.append(thumb)
 
             if (batch_idx + 1) % 50 == 0:
                 n = sum(f.shape[0] for f in all_features)
                 print(f"  Processed {n} images...")
 
-        # Concatenate into single tensors
+        # Concatenate into single tensors (only 200MB for 100k vectors!)
         self.train_features = torch.cat(all_features, dim=0).to(device)
         self.train_labels = torch.cat(all_labels, dim=0).to(device)
         self.train_images = all_images
@@ -806,7 +808,7 @@ class KNNDetector(AbstractBaseDetector):
             zip(top_indices.tolist(), top_distances.tolist()), start=1
         ):
             label_idx = self.train_labels[idx].item()
-            img_item = self.train_images[idx]
+            img_item = self.train_images[idx] if (self.train_images and idx < len(self.train_images)) else None
             if isinstance(img_item, torch.Tensor) and img_item.dtype == torch.uint8:
                 img_item = img_item.float() / 255.0
             neighbors.append({

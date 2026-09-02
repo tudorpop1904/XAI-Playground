@@ -27,6 +27,7 @@ services:
       - OLLAMA_HOST=http://ollama:11434
       - HF_HOME=/app/storage/.cache/huggingface
       - KAGGLEHUB_CACHE=/app/storage/.cache/kagglehub
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
     dns:
       - 8.8.8.8
       - 1.1.1.1
@@ -34,6 +35,8 @@ services:
       - playground_net
     depends_on:
       ollama:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')"]
@@ -97,6 +100,26 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+    restart: unless-stopped
+
+  # ─── RabbitMQ Message Broker ─────────────────────────────
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: xai-rabbitmq
+    ports:
+      - "5672:5672"   # AMQP
+      - "15672:15672" # Management UI
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    networks:
+      - playground_net
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 15s
+      timeout: 10s
+      start_period: 30s
+      retries: 5
     restart: unless-stopped
 
 # ─── Networks ──────────────────────────────────────────────

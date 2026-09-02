@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 import os
 
 from db.database import init_db
-from api.routers import analyze, enhance, history, interpret, datasets, training, generation
+from api.routers import analyze, enhance, history, interpret, datasets, training, generation, jobs
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -20,6 +20,9 @@ async def lifespan(app: FastAPI):
     (storage / "datasets").mkdir(parents=True, exist_ok=True)
     # Initialise SQLite schema (CREATE TABLE IF NOT EXISTS — idempotent)
     init_db()
+    # Start RabbitMQ consumer background thread
+    from api.workers.consumer import start_consumer_thread
+    start_consumer_thread()
     yield
 
 app = FastAPI(title="Playground", description="Playground API", version="1.0.0", lifespan=lifespan)
@@ -52,3 +55,4 @@ app.include_router(interpret.router)
 app.include_router(datasets.router)
 app.include_router(training.router)
 app.include_router(generation.router)
+app.include_router(jobs.router)

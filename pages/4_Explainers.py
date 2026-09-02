@@ -71,25 +71,56 @@ with tab_generate:
 
     if st.button("✨ Generate & Load for Analysis", type="secondary"):
         req_mode = "cloud" if "Cloud" in gen_mode else "local"
-        with st.spinner(f"Generating synthetic image via Stable Diffusion ({req_mode})..."):
-            try:
-                gen_res = requests.post(
-                    f"{API_BASE_URL}/api/v1/generate",
-                    json={
-                        "prompt": gen_prompt,
-                        "mode": req_mode,
-                        "hf_token": gen_token,
-                        "model_id": gen_model
-                    }
-                )
-                if gen_res.status_code == 200:
-                    gen_data = gen_res.json()
-                    st.session_state.test_image_path = gen_data["image_path"]
-                    st.success(f"Generated synthetic image in {gen_data['time_taken']:.2f}s!")
+        try:
+            gen_res = requests.post(
+                f"{API_BASE_URL}/api/v1/generate",
+                json={
+                    "prompt": gen_prompt,
+                    "mode": req_mode,
+                    "hf_token": gen_token,
+                    "model_id": gen_model,
+                },
+            ).json()
+
+            if req_mode == "local":
+                # Local is synchronous
+                if gen_res.get("status") == "success":
+                    st.session_state.test_image_path = gen_res["image_path"]
+                    st.success(f"Generated in {gen_res['time_taken']:.2f}s!")
                 else:
-                    st.error(f"Generation failed: {gen_res.text}")
-            except Exception as err:
-                st.error(f"Failed to connect to generation backend: {err}")
+                    st.error(f"Generation failed: {gen_res}")
+            elif "job_id" in gen_res:
+                # Cloud is async — poll for result
+                job_id = gen_res["job_id"]
+                st.info(f"📬 Queued cloud generation job `{job_id}`")
+                prog = st.progress(5, text="Connecting to Hugging Face...")
+                MAX_WAIT, elapsed, fake_p = 300, 0, 5
+                while elapsed < MAX_WAIT:
+                    import time
+                    time.sleep(2)
+                    elapsed += 2
+                    job = requests.get(f"{API_BASE_URL}/api/v1/jobs/{job_id}").json()
+                    s = job.get("status")
+                    if s in ("queued", "running"):
+                        fake_p = min(fake_p + 5, 90)
+                        prog.progress(fake_p, text="🎨 Generating image on HuggingFace servers...")
+                    elif s == "done":
+                        prog.progress(100, text="✅ Done!")
+                        result = job.get("result", {})
+                        st.session_state.test_image_path = result.get("image_path")
+                        st.success(f"Generated in {result.get('time_taken', 0):.2f}s! Image loaded for analysis.")
+                        break
+                    elif s == "error":
+                        prog.progress(100, text="❌ Failed")
+                        st.error(f"Generation failed: {job.get('error', 'Unknown error')}")
+                        break
+                else:
+                    st.error("⏱️ Timeout — generation took too long.")
+            else:
+                st.error(f"Unexpected response: {gen_res}")
+        except Exception as err:
+            st.error(f"Failed to connect to generation backend: {err}")
+
 
 # Display Active Image for Analysis
 st.markdown("---")

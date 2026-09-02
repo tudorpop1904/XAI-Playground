@@ -6,6 +6,8 @@ from PIL import Image
 from pathlib import Path
 import time
 from core.utils.logger import get_logger
+from api.workers import job_store as _job_store
+from api.workers.producer import publish_job
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/v1")
@@ -43,62 +45,53 @@ def get_local_pipeline(model_id: str):
 def generate_image(req: GenerateRequest):
     """
     Generate a synthetic Deepfake image using Hugging Face Diffusion Models.
-    Supports either 'cloud' (HF Inference API) or 'local' (diffusers on GPU).
+
+    - mode="cloud"  : Async via RabbitMQ — returns {job_id, status="queued"} immediately.
+                      Poll GET /api/v1/jobs/{job_id} for result.
+    - mode="local"  : Synchronous — runs diffusers pipeline on local GPU. Returns image_path directly.
     """
-    start_time = time.time()
-    
     if req.mode == "cloud":
         if not req.hf_token:
             raise HTTPException(status_code=400, detail="Hugging Face API token is required for cloud mode.")
-            
-        api_url = f"https://router.huggingface.co/hf-inference/models/{req.model_id}"
-        headers = {
-            "Authorization": f"Bearer {req.hf_token}",
-            "Content-Type": "application/json"
-        }
-        
+
         try:
-            logger.info(f"Requesting Hugging Face Inference Router ({api_url}) for prompt: {req.prompt}")
-            response = requests.post(
-                api_url,
-                headers=headers,
-                json={"inputs": req.prompt},
-                timeout=120
+            job_id = _job_store.create_job()
+            publish_job(
+                "hf_generate",
+                {
+                    "prompt": req.prompt,
+                    "model_id": req.model_id,
+                    "hf_token": req.hf_token,
+                },
+                job_id,
             )
-            if response.status_code != 200:
-                logger.error(f"HF Router returned HTTP {response.status_code}: {response.text}")
-                raise HTTPException(status_code=response.status_code, detail=f"Hugging Face API error ({response.status_code}): {response.text}")
-                
-            image_bytes = response.content
-            image = Image.open(io.BytesIO(image_bytes))
-        except HTTPException:
-            raise
+            logger.info(f"Queued HF cloud generation job {job_id} for model {req.model_id}")
+            return {"job_id": job_id, "status": "queued", "model_id": req.model_id}
         except Exception as e:
-            logger.error(f"Cloud generation failed: {e}")
-            raise HTTPException(status_code=500, detail=f"Cloud generation failed: {e}")
-            
+            logger.error(f"Failed to queue HF generation: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to queue generation job: {e}")
+
     elif req.mode == "local":
+        # Local GPU pipeline — stays synchronous (no external network calls)
         try:
+            start_time = time.time()
             pipe = get_local_pipeline(req.model_id)
             logger.info(f"Generating locally for prompt: {req.prompt}")
             image = pipe(req.prompt).images[0]
+            elapsed_time = time.time() - start_time
+
+            from api.main import IMAGES
+            IMAGES.mkdir(parents=True, exist_ok=True)
+            save_path = IMAGES / f"generated_{int(time.time())}.jpg"
+            image.save(save_path)
+
+            logger.info(f"Local generation completed in {elapsed_time:.2f}s")
+            return {
+                "status": "success",
+                "image_path": str(save_path),
+                "time_taken": elapsed_time,
+            }
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Local generation failed: {e}")
     else:
         raise HTTPException(status_code=400, detail="Invalid mode. Must be 'cloud' or 'local'.")
-        
-    elapsed_time = time.time() - start_time
-    logger.info(f"Generation completed in {elapsed_time:.2f} seconds.")
-    
-    # Save the generated image
-    from api.main import IMAGES
-    IMAGES.mkdir(parents=True, exist_ok=True)
-    save_path = IMAGES / f"generated_{int(time.time())}.jpg"
-    image.save(save_path)
-    
-    # Return path relative to project root or absolute, but we need it available for frontend
-    return {
-        "status": "success",
-        "image_path": str(save_path),
-        "time_taken": elapsed_time
-    }

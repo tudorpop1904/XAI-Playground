@@ -35,9 +35,20 @@ import time
 
 logger = get_logger(__name__)
 
+import hashlib
 from typing import Literal
 
 router = APIRouter(prefix="/api/v1")
+
+@router.get("/evaluations")
+async def get_evaluations():
+    """Returns aggregated live XAI benchmark metrics grouped by explainer method."""
+    conn = get_connection()
+    try:
+        repo = ResultRepository(conn)
+        return repo.get_all_evaluations()
+    finally:
+        conn.close()
 
 @router.post("/analyze")
 async def analyze_image(
@@ -54,111 +65,127 @@ async def analyze_image(
     logger.info(f"Received /analyze request. Detector: {detector}, Explainer: {explainer}, Enhance: {enhance}")
     start_time = time.time()
 
-    # Read uploaded file
+    # Read uploaded file and compute content hash
     image_bytes = await file.read()
-    img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    file_hash = hashlib.sha256(image_bytes).hexdigest()[:12]
+    filename_stem = f"{Path(file.filename).stem}_{file_hash}"
     
-    transform = transforms.ToTensor()
-    image_tensor = transform(img).unsqueeze(0)
-    
-    filename_stem = Path(file.filename).stem
     tensor_path = IMAGES / f"{filename_stem}.pt"
-    
-    # Check for enhancements
     if enhance:
-        image_tensor = SuperResolutionEnhancer().enhance(image_tensor)
         tensor_path = IMAGES / f"{filename_stem}_enhanced.pt"
-        
-    torch.save(image_tensor, tensor_path)
 
-    # Fetch DetectionResults
-    logger.info(f"Running detection using model: {detector}")
-    detector_model = AbstractBaseDetector.get_by_name(detector)
-    detection = detector_model.predict(str(tensor_path))
-    logger.info(f"Detection finished. Is Deepfake: {detection.ai_deepfake} (Confidence: {detection.confidence:.2f})")
+    # Save tensor to disk if not already cached
+    if not tensor_path.exists():
+        img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        transform = transforms.ToTensor()
+        image_tensor = transform(img).unsqueeze(0)
+        if enhance:
+            image_tensor = SuperResolutionEnhancer().enhance(image_tensor)
+        torch.save(image_tensor, tensor_path)
+    else:
+        image_tensor = torch.load(tensor_path, map_location="cpu", weights_only=False)
 
-    # Fetch XAIResults
-    logger.info(f"Running XAI explanation using method: {explainer}")
-    kwargs = {}
-    if explainer.upper() in ["OCCLUSION", "PMI", "SOBOL"]:
-        kwargs["grid_rows"] = grid_rows
-        kwargs["grid_cols"] = grid_cols
-    if explainer.upper() == "SOBOL":
-        kwargs["n_samples"] = n_samples
-        
-    explainer_model = BaseExplainer.get_explainer(explainer, **kwargs)
-    explanation = explainer_model.explain(
-        detector_model,
-        str(tensor_path),
-        int(detection.ai_deepfake)
-    )
-    logger.info(f"XAI explanation generated successfully.")
-
-    heatmap = explanation.returned_obj
-
-    # Save heatmap to disk for frontend display
-    heatmap_path = IMAGES / f"{tensor_path.stem}_{explainer}_heatmap.pt"
-    torch.save(heatmap, heatmap_path)
-
-    # Compute XAI metrics
-    sparsity = compute_sparsity(heatmap)
-    faithfulness = compute_faithfulness(
-        detector_model,
-        image_tensor,
-        heatmap,
-        int(detection.ai_deepfake)
-    )
-    stability = compute_stability(
-        explainer_model,
-        str(tensor_path),
-        int(detection.ai_deepfake),
-        detector_model
-    )
-
-    # Update the actual domain object with newly computed metrics
-    if not hasattr(explanation, "metrics") or explanation.metrics is None:
-        explanation.metrics = {}
-        
-    explanation.metrics.update({
-        "sparsity": sparsity,
-        "faithfulness": faithfulness,
-        "stability": stability
-    })
-
-    # Save DetectionResult and XAIResult to disk/DB for persistence
     conn = get_connection()
     try:
         repo = ResultRepository(conn)
-        detection_id = repo.save_detection(detection, str(tensor_path))
-        repo.save_xai(
-            explanation,
-            detection_id,
-            str(tensor_path),
-            str(heatmap_path)
-        )
-        logger.info(f"Results successfully persisted to SQLite database (Detection ID: {detection_id}).")
-    except Exception as e:
-        logger.error(f"Failed to persist results to database: {e}")
-        raise
+        
+        # 1. SMART CACHE STEP 1: Detection Result Reuse
+        existing_det = repo.find_detection(detector, str(tensor_path))
+        if existing_det:
+            detection_id = existing_det["id"]
+            ai_deepfake = bool(existing_det["ai_deepfake"])
+            confidence = float(existing_det["confidence"])
+            det_metrics = existing_det.get("metrics") or {}
+            logger.info(f"[CACHE HIT] Reusing existing detection (ID: {detection_id}) for {detector}.")
+            detector_model = AbstractBaseDetector.get_by_name(detector)
+        else:
+            logger.info(f"Running detection using model: {detector}")
+            detector_model = AbstractBaseDetector.get_by_name(detector)
+            detection = detector_model.predict(str(tensor_path))
+            ai_deepfake = bool(detection.ai_deepfake)
+            confidence = float(detection.confidence)
+            det_metrics = detection.metrics.copy() if detection.metrics else {}
+            detection_id = repo.save_detection(detection, str(tensor_path))
+            logger.info(f"Detection saved to DB (ID: {detection_id}). Deepfake: {ai_deepfake} ({confidence:.2f})")
+
+        # 2. SMART CACHE STEP 2: XAI Heatmap & Metrics Reuse
+        heatmap_path = IMAGES / f"{tensor_path.stem}_{explainer}_heatmap.pt"
+        existing_xai = repo.find_xai(detection_id, explainer)
+
+        if existing_xai and heatmap_path.exists():
+            logger.info(f"[CACHE HIT] Reusing existing XAI heatmap (ID: {existing_xai['id']}) for {explainer}.")
+            xai_metrics = existing_xai.get("metrics") or {}
+        else:
+            logger.info(f"Computing new XAI explanation using: {explainer}")
+            kwargs = {}
+            if explainer.upper() in ["OCCLUSION", "PMI", "SOBOL"]:
+                kwargs["grid_rows"] = grid_rows
+                kwargs["grid_cols"] = grid_cols
+            if explainer.upper() == "SOBOL":
+                kwargs["n_samples"] = n_samples
+
+            explainer_model = BaseExplainer.get_explainer(explainer, **kwargs)
+            explanation = explainer_model.explain(
+                detector_model,
+                str(tensor_path),
+                int(ai_deepfake)
+            )
+
+            heatmap = explanation.returned_obj
+            torch.save(heatmap, heatmap_path)
+
+            sparsity = compute_sparsity(heatmap)
+            faithfulness = compute_faithfulness(
+                detector_model,
+                image_tensor,
+                heatmap,
+                int(ai_deepfake)
+            )
+            stability = compute_stability(
+                explainer_model,
+                str(tensor_path),
+                int(ai_deepfake),
+                detector_model
+            )
+
+            if not hasattr(explanation, "metrics") or explanation.metrics is None:
+                explanation.metrics = {}
+
+            explanation.metrics.update({
+                "sparsity": sparsity,
+                "faithfulness": faithfulness,
+                "stability": stability
+            })
+            xai_metrics = explanation.metrics
+
+            repo.save_xai(
+                explanation,
+                detection_id,
+                str(tensor_path),
+                str(heatmap_path)
+            )
+            # Update live running averages in xai_evaluations table
+            repo.update_xai_evaluation(explainer)
+            logger.info(f"Saved new XAI result and updated live evaluations for {explainer}.")
+
     finally:
         conn.close()
 
-    # Create combined metrics for the API response
-    combined_metrics = detection.metrics.copy()
-    combined_metrics.update(explanation.metrics)
+    # Combine metrics
+    combined_metrics = det_metrics.copy()
+    combined_metrics.update(xai_metrics)
 
-    # Return the Pydantic DTO
+    elapsed_time = time.time() - start_time
+    logger.info(f"Request completed in {elapsed_time:.2f} seconds.")
+
     response = AnalysisResponse(
-        type=detection.type,
-        model_name=detection.model_name,
-        ai_deepfake=detection.ai_deepfake,
-        confidence=detection.confidence,
+        type="DETECTION",
+        model_name=detector,
+        ai_deepfake=ai_deepfake,
+        confidence=confidence,
         returned_obj=str(heatmap_path),
         metrics=combined_metrics,
         created_at=datetime.now(),
     )
-
-    elapsed_time = time.time() - start_time
-    logger.info(f"Request completed in {elapsed_time:.2f} seconds.")
 
     return response.model_dump()

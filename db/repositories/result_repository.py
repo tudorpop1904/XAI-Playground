@@ -141,4 +141,87 @@ class ResultRepository:
         )
         return [_row_to_dict(row) for row in cursor.fetchall()]
 
+    def find_detection(self, model_name: str, image_path: str) -> Optional[Dict[str, Any]]:
+        """Lookup an existing detection result by model name and image path to prevent duplicates."""
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "SELECT * FROM detection_results WHERE model_name = ? AND image_path = ? ORDER BY id DESC LIMIT 1",
+            (model_name, image_path)
+        )
+        row = cursor.fetchone()
+        return _row_to_dict(row) if row else None
+
+    def find_xai(self, detection_id: int, explainer_method: str) -> Optional[Dict[str, Any]]:
+        """Lookup an existing XAI result for a specific detection to enable instant cache hits."""
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "SELECT * FROM xai_results WHERE detection_id = ? AND explainer_method = ? ORDER BY id DESC LIMIT 1",
+            (detection_id, explainer_method)
+        )
+        row = cursor.fetchone()
+        return _row_to_dict(row) if row else None
+
+    def update_xai_evaluation(self, explainer_method: str, dataset_name: str = "Live_Inference") -> None:
+        """
+        Aggregates running averages for stability, faithfulness, and sparsity
+        from all xai_results matching the explainer_method and upserts into xai_evaluations.
+        """
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT metrics FROM xai_results WHERE explainer_method = ?", (explainer_method,))
+        rows = cursor.fetchall()
+
+        stabilities: List[float] = []
+        faithfulnesses: List[float] = []
+        sparsities: List[float] = []
+
+        for (m_json,) in rows:
+            if not m_json:
+                continue
+            try:
+                m = json.loads(m_json) if isinstance(m_json, str) else m_json
+                if "stability" in m and m["stability"] is not None:
+                    stabilities.append(float(m["stability"]))
+                if "faithfulness" in m and m["faithfulness"] is not None:
+                    faithfulnesses.append(float(m["faithfulness"]))
+                if "sparsity" in m and m["sparsity"] is not None:
+                    sparsities.append(float(m["sparsity"]))
+            except Exception:
+                pass
+
+        avg_stab = round(sum(stabilities) / len(stabilities), 4) if stabilities else None
+        avg_faith = round(sum(faithfulnesses) / len(faithfulnesses), 4) if faithfulnesses else None
+        avg_spars = round(sum(sparsities) / len(sparsities), 4) if sparsities else None
+
+        cursor.execute(
+            "SELECT id FROM xai_evaluations WHERE explainer_method = ? AND dataset_name = ?",
+            (explainer_method, dataset_name)
+        )
+        existing = cursor.fetchone()
+        if existing:
+            cursor.execute(
+                """
+                UPDATE xai_evaluations
+                SET stability_score = ?, faithfulness_score = ?, sparsity_score = ?
+                WHERE id = ?
+                """,
+                (avg_stab, avg_faith, avg_spars, existing[0])
+            )
+        else:
+            cursor.execute(
+                """
+                INSERT INTO xai_evaluations
+                (explainer_method, dataset_name, stability_score, faithfulness_score, sparsity_score)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (explainer_method, dataset_name, avg_stab, avg_faith, avg_spars)
+            )
+        self.conn.commit()
+
+    def get_all_evaluations(self) -> List[Dict[str, Any]]:
+        """Returns all aggregated XAI evaluations."""
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM xai_evaluations ORDER BY explainer_method ASC")
+        return [dict(row) for row in cursor.fetchall()]
+
+
 

@@ -91,6 +91,9 @@ async def analyze_image(
         
         # 1. SMART CACHE STEP 1: Detection Result Reuse
         existing_det = repo.find_detection(detector, str(tensor_path))
+        if not existing_det:
+            existing_det = repo.find_detection(detector, file.filename)
+
         if existing_det:
             detection_id = existing_det["id"]
             ai_deepfake = bool(existing_det["ai_deepfake"])
@@ -109,11 +112,22 @@ async def analyze_image(
             logger.info(f"Detection saved to DB (ID: {detection_id}). Deepfake: {ai_deepfake} ({confidence:.2f})")
 
         # 2. SMART CACHE STEP 2: XAI Heatmap & Metrics Reuse
-        heatmap_path = IMAGES / f"{tensor_path.stem}_{explainer}_heatmap.pt"
         existing_xai = repo.find_xai(detection_id, explainer)
+        cached_heatmap_path = None
+        if existing_xai and existing_xai.get("heatmap_path"):
+            hp = Path(existing_xai["heatmap_path"])
+            if hp.exists():
+                cached_heatmap_path = hp
+            elif (IMAGES / hp.name).exists():
+                cached_heatmap_path = IMAGES / hp.name
+            else:
+                fallback = IMAGES / f"{tensor_path.stem}_{explainer}_heatmap.pt"
+                if fallback.exists():
+                    cached_heatmap_path = fallback
 
-        if existing_xai and heatmap_path.exists():
-            logger.info(f"[CACHE HIT] Reusing existing XAI heatmap (ID: {existing_xai['id']}) for {explainer}.")
+        if existing_xai and cached_heatmap_path is not None:
+            logger.info(f"[CACHE HIT] Reusing existing XAI heatmap (ID: {existing_xai['id']}, Path: {cached_heatmap_path}) for {explainer}.")
+            heatmap_path = cached_heatmap_path
             xai_metrics = existing_xai.get("metrics") or {}
         else:
             logger.info(f"Computing new XAI explanation using: {explainer}")
@@ -132,6 +146,7 @@ async def analyze_image(
             )
 
             heatmap = explanation.returned_obj
+            heatmap_path = IMAGES / f"{tensor_path.stem}_{explainer}_heatmap.pt"
             torch.save(heatmap, heatmap_path)
 
             sparsity = compute_sparsity(heatmap)

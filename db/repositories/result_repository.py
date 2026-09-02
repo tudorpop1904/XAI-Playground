@@ -141,22 +141,42 @@ class ResultRepository:
         )
         return [_row_to_dict(row) for row in cursor.fetchall()]
 
-    def find_detection(self, model_name: str, image_path: str) -> Optional[Dict[str, Any]]:
-        """Lookup an existing detection result by model name and image path to prevent duplicates."""
+    def find_detection(self, model_name: str, filename_or_path: str) -> Optional[Dict[str, Any]]:
+        """
+        Lookup an existing detection result by model name and filename stem/path.
+        Matches exact path, base filename, or substring to handle cross-platform path differences.
+        """
+        from pathlib import Path
+        stem = Path(filename_or_path).stem
+        base_name = stem.split("_")[0]  # E.g. 'real_1' from 'real_1_df4116b52ca4'
         cursor = self.conn.cursor()
         cursor.execute(
-            "SELECT * FROM detection_results WHERE model_name = ? AND image_path = ? ORDER BY id DESC LIMIT 1",
-            (model_name, image_path)
+            """
+            SELECT * FROM detection_results 
+            WHERE model_name = ? 
+              AND (image_path = ? OR image_path LIKE ? OR image_path LIKE ?)
+            ORDER BY id DESC LIMIT 1
+            """,
+            (model_name, filename_or_path, f"%{stem}%", f"%{base_name}%")
         )
         row = cursor.fetchone()
         return _row_to_dict(row) if row else None
 
     def find_xai(self, detection_id: int, explainer_method: str) -> Optional[Dict[str, Any]]:
-        """Lookup an existing XAI result for a specific detection to enable instant cache hits."""
+        """
+        Lookup an existing XAI result for a specific detection to enable instant cache hits.
+        Handles method name aliases (e.g., 'occlusion' vs 'occlusion_sensitivity').
+        """
+        method_prefix = explainer_method.lower().replace("_sensitivity", "").replace("sensitivity", "")
         cursor = self.conn.cursor()
         cursor.execute(
-            "SELECT * FROM xai_results WHERE detection_id = ? AND explainer_method = ? ORDER BY id DESC LIMIT 1",
-            (detection_id, explainer_method)
+            """
+            SELECT * FROM xai_results 
+            WHERE detection_id = ? 
+              AND (explainer_method = ? OR explainer_method LIKE ?)
+            ORDER BY id DESC LIMIT 1
+            """,
+            (detection_id, explainer_method, f"{method_prefix}%")
         )
         row = cursor.fetchone()
         return _row_to_dict(row) if row else None

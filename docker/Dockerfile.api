@@ -45,7 +45,6 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:8000/docs || exit 1
 
 RUN apt update
-RUN apt upgrade
 RUN apt install -y sqlite3
 
 # Run with uvicorn, binding to 0.0.0.0 so it's reachable from other containers

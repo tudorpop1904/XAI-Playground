@@ -32,4 +32,4 @@ tests/
 
 # Manim (not containerized)
 manim/
-scripts/
+

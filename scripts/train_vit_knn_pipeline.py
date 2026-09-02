@@ -99,6 +99,7 @@ def main():
     parser.add_argument("--knn-k", type=int, default=5, help="Number of neighbors for k-NN")
     parser.add_argument("--knn-metric", type=str, default="cosine", choices=["cosine", "euclidean"])
     parser.add_argument("--knn-backbone", type=str, default="resnet18", choices=["resnet18", "ftl_cnn", "vit"])
+    parser.add_argument("--num-workers", type=int, default=2, help="Number of DataLoader workers (0 to disable shm IPC)")
     args = parser.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -111,6 +112,7 @@ def main():
     logger.info(f" Dataset Target  : {args.dataset_slug}")
     logger.info(f" ViT Epochs      : {args.vit_epochs}")
     logger.info(f" Batch Size      : {args.batch_size}")
+    logger.info(f" Num Workers     : {args.num_workers}")
     logger.info("=" * 70)
 
     # -------------------------------------------------------------------------
@@ -139,14 +141,14 @@ def main():
         train_dataset,
         batch_size=args.batch_size,
         shuffle=True,
-        num_workers=4 if device == "cuda" else 0,
+        num_workers=args.num_workers,
         pin_memory=(device == "cuda"),
     )
     val_loader = DataLoader(
         val_dataset,
         batch_size=args.batch_size,
         shuffle=False,
-        num_workers=4 if device == "cuda" else 0,
+        num_workers=args.num_workers,
         pin_memory=(device == "cuda"),
     )
 

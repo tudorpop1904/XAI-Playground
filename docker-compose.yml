@@ -18,6 +18,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.api
     container_name: xai-api
+    shm_size: '8gb'
     ports:
       - "8000:8000"
     volumes:

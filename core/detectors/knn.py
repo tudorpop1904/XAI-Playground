@@ -537,36 +537,39 @@ class KNNDetector(AbstractBaseDetector):
         self.to(device)
         self.eval()  # Backbone is always in eval mode
 
-        all_features: list[torch.Tensor] = []
-        all_labels: list[torch.Tensor] = []
-        all_images: list[torch.Tensor] = []
+        total_samples = len(train_loader.dataset)
+        feat_dim = getattr(self.backbone, "feat_dim", 512)
 
-        print(f"[{self.name}] Extracting features from training set...")
+        # Pre-allocate fixed contiguous CPU buffer — exact memory usage known up front
+        # 120k samples = only 245 MB total! No Python heap fragmentation or list overhead.
+        buffer_features = torch.empty((total_samples, feat_dim), dtype=torch.float32)
+        buffer_labels = torch.empty((total_samples,), dtype=torch.long)
 
-        for batch_idx, (images, labels) in enumerate(train_loader):
-            images = images.to(device)
+        print(
+            f"[{self.name}] Extracting features for {total_samples} samples "
+            f"(Pre-allocated buffer: {total_samples * feat_dim * 4 / (1024**2):.1f} MB)..."
+        )
 
-            # Extract features: [B, 3, H, W] -> [B, 512]
-            features = self.backbone(images)
+        ptr = 0
+        with torch.no_grad():
+            for batch_idx, (images, labels) in enumerate(train_loader):
+                bs = images.size(0)
+                images = images.to(device)
 
-            all_features.append(features.cpu())
-            all_labels.append(labels.cpu())
+                # Extract features: [B, 3, H, W] -> [B, D]
+                features = self.backbone(images)
 
-            # Store up to 1000 exemplar thumbnails for UI preview without memory bloat
-            if len(all_images) < 1000:
-                thumbnails = (F.interpolate(images, size=(128, 128), mode="bilinear", align_corners=False) * 255.0).clamp(0, 255).to(torch.uint8).cpu()
-                for thumb in thumbnails:
-                    if len(all_images) < 1000:
-                        all_images.append(thumb)
+                buffer_features[ptr : ptr + bs] = features.cpu()
+                buffer_labels[ptr : ptr + bs] = labels.cpu()
+                ptr += bs
 
-            if (batch_idx + 1) % 50 == 0:
-                n = sum(f.shape[0] for f in all_features)
-                print(f"  Processed {n} images...")
+                if (batch_idx + 1) % 50 == 0 or ptr == total_samples:
+                    print(f"  Processed {ptr}/{total_samples} images ({ptr / total_samples:.1%})...")
 
-        # Concatenate into single tensors (only 200MB for 100k vectors!)
-        self.train_features = torch.cat(all_features, dim=0).to(device)
-        self.train_labels = torch.cat(all_labels, dim=0).to(device)
-        self.train_images = all_images
+        # Trim in case of uneven dataset and load to device
+        self.train_features = buffer_features[:ptr].to(device)
+        self.train_labels = buffer_labels[:ptr].to(device)
+        self.train_images = []  # No raw images retained in RAM
         self._is_fitted = True
 
         n_total = self.train_features.shape[0]
@@ -575,7 +578,7 @@ class KNNDetector(AbstractBaseDetector):
 
         print(
             f"[{self.name}] Stored {n_total} feature vectors "
-            f"({n_real} Real, {n_ai} AI-Generated)"
+            f"({n_real} Real, {n_ai} AI-Generated) in {self.train_features.element_size() * self.train_features.nelement() / (1024**2):.1f} MB"
         )
 
         # Build history dict (compatible with CNN/ViT format)

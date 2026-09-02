@@ -6,10 +6,9 @@ Listens on the 'xai_jobs' queue and dispatches to task handlers based on message
 
 Supported job types:
   - "kaggle_prepare"  : Downloads and indexes a Kaggle dataset.
-  - "hf_generate"     : Generates an image via HuggingFace Inference Router.
+  - "hf_generate"     : Generates an image via HuggingFace InferenceClient.
 """
 
-import io
 import json
 import os
 import time
@@ -84,9 +83,14 @@ def _handle_kaggle_prepare(job_id: str, payload: dict) -> None:
 
 
 def _handle_hf_generate(job_id: str, payload: dict) -> None:
-    """Generates an image via HuggingFace Inference Router and saves it to disk."""
-    import requests
-    from PIL import Image
+    """Generates an image via HuggingFace InferenceClient and saves it to disk.
+
+    Uses huggingface_hub.InferenceClient which automatically selects the best
+    available provider (fal-ai, together, replicate, hf-inference, etc.) for
+    the requested model — unlike hardcoding 'hf-inference' which only supports
+    a small subset of models.
+    """
+    from huggingface_hub import InferenceClient
     from pathlib import Path
 
     prompt = payload["prompt"]
@@ -97,25 +101,14 @@ def _handle_hf_generate(job_id: str, payload: dict) -> None:
     logger.info(f"[Worker] hf_generate started: model={model_id}")
 
     start_time = time.time()
-    api_url = f"https://router.huggingface.co/hf-inference/models/{model_id}"
-    headers = {
-        "Authorization": f"Bearer {hf_token}",
-        "Content-Type": "application/json",
-    }
 
     try:
-        response = requests.post(
-            api_url,
-            headers=headers,
-            json={"inputs": prompt},
-            timeout=120,
-        )
-        if response.status_code != 200:
-            raise RuntimeError(
-                f"HF Router returned HTTP {response.status_code}: {response.text}"
-            )
+        client = InferenceClient(token=hf_token)
+        logger.info(f"[Worker] Calling InferenceClient.text_to_image(model={model_id})")
 
-        image = Image.open(io.BytesIO(response.content))
+        # Returns a PIL Image directly — handles provider routing automatically
+        image = client.text_to_image(prompt, model=model_id)
+
         from api.main import IMAGES
         IMAGES.mkdir(parents=True, exist_ok=True)
         save_path = IMAGES / f"generated_{int(time.time())}.jpg"

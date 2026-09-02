@@ -31,8 +31,8 @@ class GenerateRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=1000, description="Diffusion text prompt")
     mode: Literal["cloud", "local"] = Field("cloud", description="Inference mode ('cloud' or 'local')")
     hf_token: str = Field("", description="Hugging Face API token for cloud inference")
-    model_id: Literal[
+    model_id: str = Field(
         "black-forest-labs/FLUX.1-schnell",
-        "black-forest-labs/FLUX.1-dev",
-        "stabilityai/stable-diffusion-xl-base-1.0",
-    ] = Field("black-forest-labs/FLUX.1-schnell", description="Pretrained diffusion model repo")
+        min_length=3,
+        description="HuggingFace model repo ID (e.g. 'black-forest-labs/FLUX.1-schnell')"
+    )

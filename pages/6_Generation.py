@@ -17,11 +17,18 @@ st.markdown("### Generation Settings")
 col1, col2 = st.columns(2)
 
 mode = col1.radio("Processing Mode", ["Cloud (Hugging Face API)", "Local GPU (diffusers)"])
-model_id = col2.selectbox("Model", [
+
+SUGGESTED_MODELS = [
     "black-forest-labs/FLUX.1-schnell",
     "black-forest-labs/FLUX.1-dev",
     "stabilityai/stable-diffusion-xl-base-1.0",
-])
+    "✏️ Enter custom model ID...",
+]
+model_choice = col2.selectbox("Model", SUGGESTED_MODELS)
+if model_choice == "✏️ Enter custom model ID...":
+    model_id = col2.text_input("Custom HF model ID", placeholder="org/model-name")
+else:
+    model_id = model_choice
 
 hf_token = ""
 if mode == "Cloud (Hugging Face API)":

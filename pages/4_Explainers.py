@@ -63,7 +63,7 @@ with tab_generate:
     gen_prompt = st.text_input("Diffusion Prompt", value="A hyper-realistic portrait of an astronaut on Mars, 8k, detailed")
     col_g1, col_g2 = st.columns(2)
     gen_mode = col_g1.radio("Mode", ["Cloud (Hugging Face API)", "Local GPU (diffusers)"], key="gen_mode_exp")
-    gen_model = col_g2.selectbox("Model", ["black-forest-labs/FLUX.1-schnell", "black-forest-labs/FLUX.1-dev", "stabilityai/stable-diffusion-xl-base-1.0"], key="gen_model_exp")
+    gen_model = col_g2.selectbox("Model", ["black-forest-labs/FLUX.1-Krea-dev", "Qwen/Qwen-Image"], key="gen_model_exp")
     
     gen_token = ""
     if gen_mode == "Cloud (Hugging Face API)":

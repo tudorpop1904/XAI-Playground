@@ -1,15 +1,38 @@
+"""
+api/routers/interpret.py
+
+LLM-based forensic interpretation of detection + XAI results via Ollama.
+
+Cache behaviour
+---------------
+If the request includes both `detection_id` and `xai_result_id`, the endpoint:
+  1. Checks `llm_interpretations` in SQLite for a cached response.
+  2. CACHE HIT  → streams the stored text instantly (fake-stream, no Ollama call).
+  3. CACHE MISS → generates with Ollama, accumulates the full text, saves to DB,
+                  then streams it to the client.
+
+This eliminates redundant Ollama calls for identical (image, detector, explainer, model) tuples.
+"""
+
 import os
 import ollama
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
+from typing import Optional
 
 from api.schemas.requests import InterpretationRequest
+from db.database import get_connection
+from db.repositories.result_repository import ResultRepository
+from core.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1:8b-instruct-q4_K_M")
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 
 _client = ollama.Client(host=OLLAMA_HOST)
 router = APIRouter(prefix="/api/v1")
+
 
 @router.get("/interpret/status")
 def check_ollama_available() -> dict:
@@ -24,6 +47,30 @@ def check_ollama_available() -> dict:
 
     except Exception as e:
         return {"status": False, "message": f"Cannot reach Ollama at {OLLAMA_HOST}: {e}"}
+
+
+@router.get("/interpret/cached")
+def get_cached_interpretation(
+    detection_id: int = Query(...),
+    xai_result_id: int = Query(...),
+    llm_model: str = Query(OLLAMA_MODEL),
+) -> dict:
+    """
+    Checks whether a cached LLM interpretation exists for the given triple.
+
+    Returns:
+        {"cached": true,  "response_text": "..."} if found.
+        {"cached": false}                          if not found.
+    """
+    conn = get_connection()
+    try:
+        repo = ResultRepository(conn)
+        cached = repo.find_llm_interpretation(detection_id, xai_result_id, llm_model)
+        if cached:
+            return {"cached": True, "response_text": cached}
+        return {"cached": False}
+    finally:
+        conn.close()
 
 
 def build_forensic_prompt(request: InterpretationRequest, deployment_env: str = "local") -> str:
@@ -58,24 +105,101 @@ def build_forensic_prompt(request: InterpretationRequest, deployment_env: str = 
     return "".join(parts)
 
 
-def stream_explanation(prompt: str, model_name: str):
-    """Stream tokens from Ollama."""
-    stream = _client.chat(
-        model=model_name,
-        messages=[{"role": "user", "content": prompt}],
-        stream=True,
-    )
+def _fake_stream(text: str):
+    """Yields a cached response as a stream (word-by-word) to preserve UX."""
+    words = text.split(" ")
+    for i, word in enumerate(words):
+        yield word + (" " if i < len(words) - 1 else "")
 
-    for chunk in stream:
-        content = chunk.get("message", {}).get("content", "")
-        if content:
-            yield content
-            
+
 @router.post("/interpret")
 async def interpret_results(request: InterpretationRequest):
     """
-    Generate a natural language explanation of the detection and XAI results via Llama 3.1.
-    Streams the response back.
+    Generate a natural language forensic explanation via Llama 3.1 (Ollama).
+
+    - If detection_id + xai_result_id are provided and a cached response exists
+      in SQLite → streams the cached text instantly (no Ollama call).
+    - Otherwise → generates with Ollama, saves result to DB, streams to client.
     """
+    can_cache = (
+        request.detection_id is not None
+        and request.xai_result_id is not None
+    )
+
+    if can_cache:
+        conn = get_connection()
+        try:
+            repo = ResultRepository(conn)
+            cached_text = repo.find_llm_interpretation(
+                request.detection_id,
+                request.xai_result_id,
+                request.llm_model,
+            )
+        finally:
+            conn.close()
+
+        if cached_text:
+            logger.info(
+                f"[LLM CACHE HIT] detection={request.detection_id}, "
+                f"xai={request.xai_result_id}, model={request.llm_model}"
+            )
+            return StreamingResponse(
+                _fake_stream(cached_text),
+                media_type="text/event-stream",
+                headers={"X-Cache": "HIT"},
+            )
+
+    # — CACHE MISS or no IDs provided: generate with Ollama —
     prompt = build_forensic_prompt(request)
-    return StreamingResponse(stream_explanation(prompt, request.llm_model), media_type="text/event-stream")
+    logger.info(
+        f"[LLM CACHE MISS] Generating with Ollama model={request.llm_model}"
+        + (f" (detection={request.detection_id}, xai={request.xai_result_id})" if can_cache else "")
+    )
+
+    if can_cache:
+        # Accumulate full response, save to DB, then stream
+        def generate_and_save():
+            accumulated = []
+            stream = _client.chat(
+                model=request.llm_model,
+                messages=[{"role": "user", "content": prompt}],
+                stream=True,
+            )
+            for chunk in stream:
+                content = chunk.get("message", {}).get("content", "")
+                if content:
+                    accumulated.append(content)
+                    yield content
+
+            full_text = "".join(accumulated)
+            if full_text:
+                conn = get_connection()
+                try:
+                    ResultRepository(conn).save_llm_interpretation(
+                        request.detection_id,
+                        request.xai_result_id,
+                        request.llm_model,
+                        full_text,
+                    )
+                finally:
+                    conn.close()
+
+        return StreamingResponse(
+            generate_and_save(),
+            media_type="text/event-stream",
+            headers={"X-Cache": "MISS"},
+        )
+    else:
+        # No IDs — plain streaming without caching
+        def stream_plain():
+            stream = _client.chat(
+                model=request.llm_model,
+                messages=[{"role": "user", "content": prompt}],
+                stream=True,
+            )
+            for chunk in stream:
+                content = chunk.get("message", {}).get("content", "")
+                if content:
+                    yield content
+
+        return StreamingResponse(stream_plain(), media_type="text/event-stream")

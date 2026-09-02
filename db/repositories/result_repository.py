@@ -144,20 +144,27 @@ class ResultRepository:
     def find_detection(self, model_name: str, filename_or_path: str) -> Optional[Dict[str, Any]]:
         """
         Lookup an existing detection result by model name and filename stem/path.
-        Matches exact path, base filename, or substring to handle cross-platform path differences.
+
+        Matching strategy (in order of precision):
+          1. Exact path match.
+          2. LIKE "%<full_stem>%" — stem includes the SHA256 hash suffix, so it's
+             unique per image content (e.g. 'real_1_df4116b52ca4').
+
+        We deliberately avoid splitting the stem on '_' to extract a 'base_name'
+        (e.g. 'real'), which was causing false positives when multiple images
+        share the same prefix word.
         """
         from pathlib import Path
-        stem = Path(filename_or_path).stem
-        base_name = stem.split("_")[0]  # E.g. 'real_1' from 'real_1_df4116b52ca4'
+        stem = Path(filename_or_path).stem  # e.g. 'real_1_df4116b52ca4'
         cursor = self.conn.cursor()
         cursor.execute(
             """
-            SELECT * FROM detection_results 
-            WHERE model_name = ? 
-              AND (image_path = ? OR image_path LIKE ? OR image_path LIKE ?)
+            SELECT * FROM detection_results
+            WHERE model_name = ?
+              AND (image_path = ? OR image_path LIKE ?)
             ORDER BY id DESC LIMIT 1
             """,
-            (model_name, filename_or_path, f"%{stem}%", f"%{base_name}%")
+            (model_name, filename_or_path, f"%{stem}%")
         )
         row = cursor.fetchone()
         return _row_to_dict(row) if row else None
@@ -260,5 +267,64 @@ class ResultRepository:
         cursor.execute("SELECT * FROM xai_evaluations ORDER BY explainer_method ASC")
         return [dict(row) for row in cursor.fetchall()]
 
+    # -------------------------------------------------------------------------
+    #  LLM Interpretation Cache
+    # -------------------------------------------------------------------------
 
+    def save_llm_interpretation(
+        self,
+        detection_id: int,
+        xai_result_id: int,
+        llm_model: str,
+        response_text: str,
+    ) -> int:
+        """
+        Persists a completed LLM forensic report to the database.
+        Uses INSERT OR REPLACE so re-running with the same key overwrites the old text.
 
+        Returns the row ID of the inserted/replaced record.
+        """
+        from datetime import datetime
+        cursor = self.conn.cursor()
+        cursor.execute(
+            """
+            INSERT OR REPLACE INTO llm_interpretations
+                (detection_id, xai_result_id, llm_model, response_text, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                detection_id,
+                xai_result_id,
+                llm_model,
+                response_text,
+                datetime.utcnow().isoformat(),
+            ),
+        )
+        self.conn.commit()
+        row_id = cursor.lastrowid
+        logger.info(
+            f"[DB] Saved LLM interpretation (detection={detection_id}, xai={xai_result_id}, model={llm_model}) → ID {row_id}"
+        )
+        return row_id
+
+    def find_llm_interpretation(
+        self,
+        detection_id: int,
+        xai_result_id: int,
+        llm_model: str,
+    ) -> Optional[str]:
+        """
+        Returns the cached LLM response text for a given
+        (detection_id, xai_result_id, llm_model) triple, or None if not cached.
+        """
+        cursor = self.conn.cursor()
+        cursor.execute(
+            """
+            SELECT response_text FROM llm_interpretations
+            WHERE detection_id = ? AND xai_result_id = ? AND llm_model = ?
+            LIMIT 1
+            """,
+            (detection_id, xai_result_id, llm_model),
+        )
+        row = cursor.fetchone()
+        return row[0] if row else None

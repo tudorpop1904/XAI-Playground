@@ -145,41 +145,5 @@ class BaseExplainer(ABC):
     
     _cache = {}
 
-    @staticmethod
-    def get_by_name(explainer_name: str) -> BaseExplainer:
-        """
-        Load an explainer from a saved file, utilizing an in-memory cache.
-
-        Parameters
-        ----------
-        explainer_name : str
-            The name of the explainer to load.
-
-        Returns
-        -------
-        BaseExplainer
-            The loaded explainer.
-
-        Raises
-        ------
-        FileNotFoundError
-            If the explainer file is not found.
-        """
-        if not MODELS_DIR.exists() or not (MODELS_DIR / f"{explainer_name}.pth").exists():
-            raise FileNotFoundError(f"Explainer {explainer_name} not found on disk.")
-        
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        
-        if explainer_name not in BaseExplainer._cache:
-            logger.info(f"Explainer '{explainer_name}' not in cache. Loading from disk...")
-            explainer = torch.load(MODELS_DIR / f"{explainer_name}.pth", weights_only=False, map_location=device)
-            explainer.name = explainer_name
-            BaseExplainer._cache[explainer_name] = explainer
-            logger.info(f"Explainer '{explainer_name}' successfully loaded and cached.")
-        else:
-            logger.info(f"Explainer '{explainer_name}' retrieved from cache.")
-
-        return BaseExplainer._cache[explainer_name]
-
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(method={self.method_name!r})"

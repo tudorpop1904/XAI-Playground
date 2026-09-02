@@ -61,6 +61,23 @@ def init_db():
         )
     """)
 
+    # LLM Interpretation Cache
+    # Key: (detection_id, xai_result_id, llm_model) — UNIQUE enforces one response per triple.
+    # INSERT OR REPLACE allows regenerating a report (overwrites the old text).
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS llm_interpretations (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            detection_id    INTEGER NOT NULL,
+            xai_result_id   INTEGER NOT NULL,
+            llm_model       TEXT NOT NULL,
+            response_text   TEXT NOT NULL,
+            created_at      TEXT NOT NULL,
+            UNIQUE(detection_id, xai_result_id, llm_model),
+            FOREIGN KEY(detection_id)  REFERENCES detection_results(id) ON DELETE CASCADE,
+            FOREIGN KEY(xai_result_id) REFERENCES xai_results(id)       ON DELETE CASCADE
+        )
+    """)
+
     conn.commit()
     conn.close()
 

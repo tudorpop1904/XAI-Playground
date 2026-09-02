@@ -12,6 +12,9 @@ class AnalysisResponse(BaseModel):
     metrics: Dict[str, Any] = {}
     created_at: Optional[datetime] = None
     image: Optional[str] = None
+    # DB IDs for LLM cache lookups
+    detection_id: Optional[int] = None
+    xai_result_id: Optional[int] = None
     
     def to_result(self) -> Result:
         return Result(

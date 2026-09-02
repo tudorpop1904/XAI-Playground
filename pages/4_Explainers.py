@@ -63,7 +63,7 @@ with tab_generate:
     gen_prompt = st.text_input("Diffusion Prompt", value="A hyper-realistic portrait of an astronaut on Mars, 8k, detailed")
     col_g1, col_g2 = st.columns(2)
     gen_mode = col_g1.radio("Mode", ["Cloud (Hugging Face API)", "Local GPU (diffusers)"], key="gen_mode_exp")
-    gen_model = col_g2.selectbox("Model", ["runwayml/stable-diffusion-v1-5", "stabilityai/stable-diffusion-2-1", "stabilityai/stable-diffusion-xl-base-1.0"], key="gen_model_exp")
+    gen_model = col_g2.selectbox("Model", ["black-forest-labs/FLUX.1-schnell", "black-forest-labs/FLUX.1-dev", "stabilityai/stable-diffusion-xl-base-1.0"], key="gen_model_exp")
     
     gen_token = ""
     if gen_mode == "Cloud (Hugging Face API)":
@@ -176,16 +176,20 @@ if st.button("Generate Explanations", type="primary"):
                             "label": "Deepfake" if analysis["ai_deepfake"] else "Real",
                             "confidence": analysis["confidence"],
                         }
+                        # Store DB IDs for LLM cache — both come from the same detection run
+                        st.session_state.detection_id = analysis.get("detection_id")
                         
                         st.session_state.xai_results.append({
                             "explainer": expl,
                             "metrics": analysis["metrics"],
-                            "heatmap_path": analysis["returned_obj"] # This is a path to the .pt file!
+                            "heatmap_path": analysis["returned_obj"],
+                            "xai_result_id": analysis.get("xai_result_id"),
                         })
                     else:
                         st.error(f"Error for {expl}: {res.text}")
                 except Exception as e:
                     st.error(f"Failed to connect: {e}")
+
                     
 if st.session_state.get("xai_results"):
     st.success("✅ Explanations generated!")

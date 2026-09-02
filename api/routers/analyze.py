@@ -129,6 +129,7 @@ async def analyze_image(
             logger.info(f"[CACHE HIT] Reusing existing XAI heatmap (ID: {existing_xai['id']}, Path: {cached_heatmap_path}) for {explainer}.")
             heatmap_path = cached_heatmap_path
             xai_metrics = existing_xai.get("metrics") or {}
+            xai_result_id = existing_xai["id"]
         else:
             logger.info(f"Computing new XAI explanation using: {explainer}")
             kwargs = {}
@@ -173,7 +174,7 @@ async def analyze_image(
             })
             xai_metrics = explanation.metrics
 
-            repo.save_xai(
+            xai_result_id = repo.save_xai(
                 explanation,
                 detection_id,
                 str(tensor_path),
@@ -201,6 +202,8 @@ async def analyze_image(
         returned_obj=str(heatmap_path),
         metrics=combined_metrics,
         created_at=datetime.now(),
+        detection_id=detection_id,
+        xai_result_id=xai_result_id,
     )
 
     return response.model_dump()

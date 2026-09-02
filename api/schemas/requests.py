@@ -1,4 +1,4 @@
-from typing import Any, Literal
+from typing import Any, Literal, Optional
 from pydantic import BaseModel, Field
 
 class TrainRequest(BaseModel):
@@ -23,13 +23,16 @@ class InterpretationRequest(BaseModel):
     confidence: float = Field(..., ge=0.0, le=1.0, description="Model prediction confidence score (0.0 - 1.0)")
     metrics: dict[str, Any] = Field(default_factory=dict, description="Quantitative XAI metrics dictionary")
     llm_model: str = Field("llama3.1:8b-instruct-q4_K_M", min_length=1, description="Ollama model identifier")
+    # Cache keys — if provided, LLM response is looked up / stored in SQLite
+    detection_id: Optional[int] = Field(None, description="DB ID of the corresponding detection result")
+    xai_result_id: Optional[int] = Field(None, description="DB ID of the corresponding XAI result")
 
 class GenerateRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=1000, description="Diffusion text prompt")
     mode: Literal["cloud", "local"] = Field("cloud", description="Inference mode ('cloud' or 'local')")
     hf_token: str = Field("", description="Hugging Face API token for cloud inference")
     model_id: Literal[
-        "runwayml/stable-diffusion-v1-5",
-        "stabilityai/stable-diffusion-2-1",
-        "stabilityai/stable-diffusion-xl-base-1.0"
-    ] = Field("runwayml/stable-diffusion-v1-5", description="Pretrained diffusion model repo")
+        "black-forest-labs/FLUX.1-schnell",
+        "black-forest-labs/FLUX.1-dev",
+        "stabilityai/stable-diffusion-xl-base-1.0",
+    ] = Field("black-forest-labs/FLUX.1-schnell", description="Pretrained diffusion model repo")

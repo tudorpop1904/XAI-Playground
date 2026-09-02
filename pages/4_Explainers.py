@@ -15,25 +15,96 @@ if not st.session_state.get("model_trained") or not st.session_state.get("test_i
 
 st.markdown("Select one or more Explainable AI methods to interpret the model's decision on a test image.")
 
-# --- Custom Image Upload ---
-uploaded_file = st.file_uploader("Upload a custom image to analyze (Optional)", type=["png", "jpg", "jpeg"])
-if uploaded_file is not None:
-    # Save the custom image to the storage directory
-    custom_image_dir = Path("storage/images")
-    custom_image_dir.mkdir(parents=True, exist_ok=True)
-    custom_image_path = custom_image_dir / "custom_upload.jpg"
-    
-    with open(custom_image_path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
+# --- Multi-Source Image Selection (Upload, Dataset Exemplar, Synthetic Diffusion) ---
+st.markdown("### 🖼️ Select or Generate Image to Analyze")
+tab_upload, tab_dataset, tab_generate = st.tabs([
+    "📁 Upload Image",
+    "🗂️ Dataset Exemplars (Real / AI)",
+    "✨ Generate Synthetic Image (Diffusion)"
+])
+
+with tab_upload:
+    uploaded_file = st.file_uploader("Upload a local image (PNG, JPG, JPEG)", type=["png", "jpg", "jpeg"])
+    if uploaded_file is not None:
+        custom_image_dir = Path("storage/images")
+        custom_image_dir.mkdir(parents=True, exist_ok=True)
+        custom_image_path = custom_image_dir / f"upload_{uploaded_file.name}"
         
-    st.session_state.test_image_path = str(custom_image_path)
-    st.success("Custom image loaded successfully!")
+        with open(custom_image_path, "wb") as f:
+            f.write(uploaded_file.getbuffer())
+            
+        st.session_state.test_image_path = str(custom_image_path)
+        st.success(f"Loaded uploaded image: {uploaded_file.name}")
 
-st.image(st.session_state.test_image_path, caption="Test Image", width=200)
-# ---------------------------
+with tab_dataset:
+    dataset_img_dir = Path("storage/images")
+    exemplar_files = []
+    for sub in ["real", "ai", ""]:
+        sub_dir = dataset_img_dir / sub if sub else dataset_img_dir
+        if sub_dir.exists():
+            exemplar_files.extend(list(sub_dir.glob("*.jpg")) + list(sub_dir.glob("*.png")) + list(sub_dir.glob("*.jpeg")))
+            
+    # Filter out generated heatmaps from exemplar list
+    clean_exemplars = [p for p in exemplar_files if "_heatmap" not in p.name and "_enhanced" not in p.name]
+    if clean_exemplars:
+        selected_exemplar = st.selectbox(
+            "Select an exemplar image from disk:",
+            options=clean_exemplars,
+            format_func=lambda p: f"{p.parent.name}/{p.name}" if p.parent.name in ["real", "ai"] else p.name
+        )
+        if selected_exemplar and st.button("Use Selected Exemplar"):
+            st.session_state.test_image_path = str(selected_exemplar)
+            st.success(f"Selected exemplar: {selected_exemplar.name}")
+    else:
+        st.info("No exemplar images found in storage/images/real or storage/images/ai.")
 
-explainer_options = ["grad_cam", "vanilla_saliency", "occlusion", "pmi", "sobol"]
-selected_explainers = st.multiselect("XAI Methods", explainer_options, default=["grad_cam"])
+with tab_generate:
+    st.markdown("Generate a brand new synthetic AI image on the fly using **Stable Diffusion**:")
+    gen_prompt = st.text_input("Diffusion Prompt", value="A hyper-realistic portrait of an astronaut on Mars, 8k, detailed")
+    col_g1, col_g2 = st.columns(2)
+    gen_mode = col_g1.radio("Mode", ["Cloud (Hugging Face API)", "Local GPU (diffusers)"], key="gen_mode_exp")
+    gen_model = col_g2.selectbox("Model", ["runwayml/stable-diffusion-v1-5", "stabilityai/stable-diffusion-2-1", "stabilityai/stable-diffusion-xl-base-1.0"], key="gen_model_exp")
+    
+    gen_token = ""
+    if gen_mode == "Cloud (Hugging Face API)":
+        gen_token = st.text_input("Hugging Face API Token", type="password", key="gen_tok_exp")
+
+    if st.button("✨ Generate & Load for Analysis", type="secondary"):
+        req_mode = "cloud" if "Cloud" in gen_mode else "local"
+        with st.spinner(f"Generating synthetic image via Stable Diffusion ({req_mode})..."):
+            try:
+                gen_res = requests.post(
+                    f"{API_BASE_URL}/api/v1/generate",
+                    json={
+                        "prompt": gen_prompt,
+                        "mode": req_mode,
+                        "hf_token": gen_token,
+                        "model_id": gen_model
+                    }
+                )
+                if gen_res.status_code == 200:
+                    gen_data = gen_res.json()
+                    st.session_state.test_image_path = gen_data["image_path"]
+                    st.success(f"Generated synthetic image in {gen_data['time_taken']:.2f}s!")
+                else:
+                    st.error(f"Generation failed: {gen_res.text}")
+            except Exception as err:
+                st.error(f"Failed to connect to generation backend: {err}")
+
+# Display Active Image for Analysis
+st.markdown("---")
+col_preview1, col_preview2 = st.columns([1, 3])
+with col_preview1:
+    if st.session_state.get("test_image_path") and Path(st.session_state.test_image_path).exists():
+        st.image(st.session_state.test_image_path, caption=f"Active: {Path(st.session_state.test_image_path).name}", width=220)
+    else:
+        st.info("No active image selected.")
+
+with col_preview2:
+    st.markdown("#### Explainability Configuration")
+    explainer_options = ["grad_cam", "vanilla_saliency", "occlusion", "pmi", "sobol"]
+    selected_explainers = st.multiselect("XAI Methods", explainer_options, default=["grad_cam"])
+
 
 st.markdown("#### Hyperparameters")
 col1, col2, col3 = st.columns(3)

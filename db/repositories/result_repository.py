@@ -237,9 +237,26 @@ class ResultRepository:
             )
         self.conn.commit()
 
+    def sync_all_evaluations(self, dataset_name: str = "Live_Inference") -> None:
+        """
+        Scans all distinct explainer methods in xai_results and populates
+        xai_evaluations with aggregated averages across all historical runs.
+        """
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT DISTINCT explainer_method FROM xai_results")
+        methods = [row[0] for row in cursor.fetchall() if row[0]]
+        for m in methods:
+            self.update_xai_evaluation(m, dataset_name=dataset_name)
+
     def get_all_evaluations(self) -> List[Dict[str, Any]]:
         """Returns all aggregated XAI evaluations."""
+        # Auto-sync on query if table is currently empty
         cursor = self.conn.cursor()
+        cursor.execute("SELECT count(*) FROM xai_evaluations")
+        count = cursor.fetchone()[0]
+        if count == 0:
+            self.sync_all_evaluations()
+
         cursor.execute("SELECT * FROM xai_evaluations ORDER BY explainer_method ASC")
         return [dict(row) for row in cursor.fetchall()]
 

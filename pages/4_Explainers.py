@@ -55,8 +55,9 @@ if st.button("Generate Explanations", type="primary"):
             with open(st.session_state.test_image_path, "rb") as f:
                 img_bytes = f.read()
 
+            filename = Path(st.session_state.test_image_path).name
             for expl in selected_explainers:
-                files = {"file": ("test.jpg", img_bytes, "image/jpeg")}
+                files = {"file": (filename, img_bytes, "image/jpeg")}
                 data = {
                     "detector": st.session_state.model_name,
                     "explainer": expl,

@@ -37,34 +37,65 @@ def _apply_grid_mask(
     mask: np.ndarray,
     grid_rows: int,
     grid_cols: int,
-    fill: float,
+    fill,          # float OR torch.Tensor of same shape as x_tensor
     mode: str,
 ) -> torch.Tensor:
     """
     Apply a low-res boolean mask to a high-res image tensor.
 
-    mode='occlude': zero out cells where mask==0 (keep visible where mask==1).
-    mode='reveal':  keep only cells where mask==1.
+    mode='occlude': replace cells where mask==0 with fill (keep mask==1 visible).
+    mode='reveal':  keep only cells where mask==1; replace rest with fill.
+
+    fill can be:
+      - float  : constant fill value (e.g. 0.5 for grey)
+      - Tensor : same shape as x_tensor, e.g. a precomputed blurred image.
+                 Each cell region is replaced with the corresponding region
+                 of the fill tensor, keeping the fill spatially coherent.
     """
     masked = x_tensor.clone()
     _, c, h, w = x_tensor.shape
     cell_h = h // grid_rows
     cell_w = w // grid_cols
-    
+    use_tensor_fill = isinstance(fill, torch.Tensor)
+
     for r in range(grid_rows):
         for c_idx in range(grid_cols):
             active = mask[r, c_idx] == 1
             if (mode == "occlude" and active) or (mode == "reveal" and not active):
                 continue
-            
+
             r0 = r * cell_h
             r1 = (r + 1) * cell_h if r < grid_rows - 1 else h
             c0 = c_idx * cell_w
             c1 = (c_idx + 1) * cell_w if c_idx < grid_cols - 1 else w
-            
-            masked[:, :, r0:r1, c0:c1] = fill
-            
+
+            if use_tensor_fill:
+                masked[:, :, r0:r1, c0:c1] = fill[:, :, r0:r1, c0:c1]
+            else:
+                masked[:, :, r0:r1, c0:c1] = fill
+
     return masked
+
+
+def _make_blur_fill(x: torch.Tensor) -> torch.Tensor:
+    """
+    Precompute a strongly-blurred version of x for use as occlusion fill.
+
+    Gaussian blur with sigma=10 eliminates high-frequency detail (edges,
+    textures) while preserving low-frequency content (overall colours,
+    rough shapes). This keeps the occluded image in-distribution for
+    models trained on natural/generated face images, unlike a constant
+    grey value which the model has never seen during training.
+
+    The kernel size is chosen as ~1/3 of the shortest spatial dimension,
+    rounded up to the nearest odd integer (required by torchvision).
+    """
+    from torchvision.transforms.functional import gaussian_blur as _gb
+    _, _, h, w = x.shape
+    k = max(11, (min(h, w) // 3) | 1)   # always odd, at least 11
+    # gaussian_blur expects [C, H, W] or [..., C, H, W]
+    blurred = _gb(x.squeeze(0), kernel_size=k, sigma=10.0).unsqueeze(0)
+    return blurred.to(x.device)
 
 
 def _normalize_grid(grid: np.ndarray) -> np.ndarray:
@@ -145,6 +176,9 @@ class OcclusionExplainer(BaseExplainer):
             confidence = probs[class_idx].item()
             baseline_prob = probs[target_class].item()
 
+        # Precompute blurred fill once — kept in-distribution vs. constant grey
+        blur_fill = _make_blur_fill(x)
+
         scores = np.zeros((self.grid_rows, self.grid_cols))
         cell_scores = {}
 
@@ -152,12 +186,12 @@ class OcclusionExplainer(BaseExplainer):
             r, c = idx // self.grid_cols, idx % self.grid_cols
             mask = np.ones((self.grid_rows, self.grid_cols), dtype=np.int8)
             mask[r, c] = 0  # Occlude this cell
-            
+
             occluded = _apply_grid_mask(
-                x, mask, self.grid_rows, self.grid_cols, self.fill, mode="occlude"
+                x, mask, self.grid_rows, self.grid_cols, blur_fill, mode="occlude"
             )
             p_occ = _get_prob(detector, occluded, target_class)
-            
+
             drop = max(0.0, baseline_prob - p_occ)
             scores[r, c] = drop
             cell_scores[f"r{r}_c{c}"] = drop
@@ -223,9 +257,11 @@ class PMIExplainer(BaseExplainer):
             class_idx = probs.argmax().item()
             confidence = probs[class_idx].item()
 
-        # Baseline: completely grey image
-        grey_tensor = torch.full_like(x, 0.5)
-        p_baseline = _get_prob(detector, grey_tensor, target_class)
+        # Baseline: fully-blurred image ("no fine detail" reference).
+        # Using blur rather than constant grey keeps the baseline in-distribution
+        # while still representing the minimum-information state for PMI.
+        blur_fill = _make_blur_fill(x)
+        p_baseline = _get_prob(detector, blur_fill, target_class)
 
         scores = np.zeros((self.grid_rows, self.grid_cols))
         cell_scores = {}
@@ -234,15 +270,16 @@ class PMIExplainer(BaseExplainer):
             r, c = idx // self.grid_cols, idx % self.grid_cols
             mask = np.zeros((self.grid_rows, self.grid_cols), dtype=np.int8)
             mask[r, c] = 1  # Reveal only this cell
-            
+
+            # Hidden cells show blurred content; only (r,c) shows original pixels
             revealed = _apply_grid_mask(
-                x, mask, self.grid_rows, self.grid_cols, 0.5, mode="reveal"
+                x, mask, self.grid_rows, self.grid_cols, blur_fill, mode="reveal"
             )
             p_reveal = _get_prob(detector, revealed, target_class)
-            
+
             ratio = (p_reveal + 1e-7) / (p_baseline + 1e-7)
             score = float(np.log2(ratio))
-            
+
             # Keep only positive information
             score = max(0.0, score)
             scores[r, c] = score
@@ -317,22 +354,25 @@ class SobolExplainer(BaseExplainer):
             class_idx = probs.argmax().item()
             confidence = probs[class_idx].item()
 
+        # Precompute blurred fill once — used for all N masked forward passes
+        blur_fill = _make_blur_fill(x)
+
         masks: list[np.ndarray] = []
         predictions: list[float] = []
 
         for _ in range(self.n_samples):
             # 50% chance for each cell to be visible/occluded
             mask = rng.binomial(1, 0.5, size=(self.grid_rows, self.grid_cols)).astype(np.int8)
-            
+
             # Avoid completely empty masks
             if mask.sum() == 0:
                 mask[rng.integers(self.grid_rows), rng.integers(self.grid_cols)] = 1
-                
+
             masked = _apply_grid_mask(
-                x, mask, self.grid_rows, self.grid_cols, 0.5, mode="occlude"
+                x, mask, self.grid_rows, self.grid_cols, blur_fill, mode="occlude"
             )
             p = _get_prob(detector, masked, target_class)
-            
+
             predictions.append(p)
             masks.append(mask)
 

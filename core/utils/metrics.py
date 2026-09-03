@@ -93,47 +93,59 @@ def compute_faithfulness(model, image_tensor: torch.Tensor, heatmap: torch.Tenso
     Measures if removing the 'important' pixels (as defined by the heatmap)
     actually drops the model's confidence in its original prediction.
     Highly faithful XAI means the heatmap accurately identifies the model's logic.
+
+    Occlusion fill strategy: Gaussian blur (sigma=10) instead of constant grey.
+    Constant grey (0.5) is out-of-distribution for models trained on face images
+    and can trigger artefact responses unrelated to the missing content.
+    Blurring removes high-frequency detail (textures, edges) while keeping
+    low-frequency content (colours, rough shapes) in-distribution.
     """
     if not isinstance(heatmap, torch.Tensor):
         heatmap = torch.tensor(heatmap)
-        
+
     model.eval()
     device = next(model.parameters()).device
     image_tensor = image_tensor.to(device)
-    
+
     with torch.no_grad():
-        # Get base prediction confidence
+        # Base prediction confidence
         base_outputs = model(image_tensor)
         base_probs = torch.softmax(base_outputs, dim=1)
         if target_class is None:
             target_class = base_probs.argmax(dim=1).item()
         base_conf = base_probs[0, target_class].item()
 
-        # Occlude the top 40% of pixels in the image
+        # Build occlusion mask: zero out top 40% most important pixels
         h_flat = heatmap.flatten()
         k = max(1, int(0.4 * h_flat.numel()))
-        
-        # Use indices to guarantee exactly 40% occlusion, even with ties/sparse heatmaps
         top_indices = torch.topk(h_flat, k).indices
         mask_flat = torch.ones_like(h_flat)
         mask_flat[top_indices] = 0.0
         mask = mask_flat.view(heatmap.shape)
-        
-        # Expand mask to match image channels if necessary (assuming image is [1, C, H, W])
+
+        # Expand mask to [1, C, H, W]
         if mask.dim() == 2:
             mask = mask.unsqueeze(0).unsqueeze(0)
         elif mask.dim() == 3:
             mask = mask.unsqueeze(0)
-            
         mask = mask.to(device)
-        # Replace occluded pixels with gray mean value (0.5 if normalized [0,1])
-        occluded_image = image_tensor * mask + 0.5 * (1 - mask)
-        
-        # Get new prediction confidence on occluded image
+
+        # Precompute blurred fill (in-distribution replacement for occluded pixels)
+        from torchvision.transforms.functional import gaussian_blur as _gb
+        _, _, h, w = image_tensor.shape
+        k_blur = max(11, (min(h, w) // 3) | 1)   # always odd, >= 11
+        blurred = _gb(
+            image_tensor.squeeze(0), kernel_size=k_blur, sigma=10.0
+        ).unsqueeze(0).to(device)
+
+        # Replace important pixels with their blurred counterparts
+        occluded_image = image_tensor * mask + blurred * (1 - mask)
+
+        # Confidence after occlusion
         occ_outputs = model(occluded_image)
         occ_probs = torch.softmax(occ_outputs, dim=1)
         occ_conf = occ_probs[0, target_class].item()
-        
+
     faithfulness = base_conf - occ_conf
     return round(faithfulness, 4)
 

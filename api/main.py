@@ -10,39 +10,48 @@ import os
 from db.database import init_db
 from api.routers import analyze, enhance, history, interpret, datasets, training, generation, jobs
 
+# Ensure storage directories exist at module load time (StaticFiles requires directory to exist)
+STORAGE = Path(__file__).parent.parent / "storage"
+IMAGES = STORAGE / "images"
+MODELS = STORAGE / "models"
+DATASETS = STORAGE / "datasets"
+
+for d in (STORAGE, IMAGES, MODELS, DATASETS):
+    d.mkdir(parents=True, exist_ok=True)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Ensure storage directories exist before anything else
-    storage = Path(__file__).parent.parent / "storage"
-    storage.mkdir(parents=True, exist_ok=True)
-    (storage / "images").mkdir(parents=True, exist_ok=True)
-    (storage / "models").mkdir(parents=True, exist_ok=True)
-    (storage / "datasets").mkdir(parents=True, exist_ok=True)
+    for d in (STORAGE, IMAGES, MODELS, DATASETS):
+        d.mkdir(parents=True, exist_ok=True)
     # Initialise SQLite schema (CREATE TABLE IF NOT EXISTS — idempotent)
     init_db()
-    # Start RabbitMQ consumer background thread
-    from api.workers.consumer import start_consumer_thread
-    start_consumer_thread()
+    # Start RabbitMQ consumer background thread if enabled
+    if os.environ.get("RABBITMQ_ENABLED", "true").lower() in ("1", "true", "yes"):
+        try:
+            from api.workers.consumer import start_consumer_thread
+            start_consumer_thread()
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Could not start RabbitMQ consumer: {e}")
     yield
 
 app = FastAPI(title="Playground", description="Playground API", version="1.0.0", lifespan=lifespan)
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 # Allow CORS from both local dev and Docker environments
-_default_origins = "http://localhost:8501,http://ui:8501"
+_default_origins = "http://localhost:8501,http://localhost:8502,http://localhost:8503,http://ui:8501"
 origins = os.environ.get("CORS_ORIGINS", _default_origins).split(",")
-
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# storage/images is created by lifespan above; just hold the reference here
-IMAGES = Path(__file__).parent.parent.joinpath("storage").joinpath("images")
 
 # Mount the static directory to serve heatmap/uploaded images
 app.mount("/storage/images", StaticFiles(directory=str(IMAGES)), name="images")

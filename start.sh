@@ -43,7 +43,7 @@ if [ -z "$SLURM_JOB_ID" ] && command -v srun >/dev/null 2>&1 && [ "$NO_SLURM" !=
 fi
 
 # —————— Informații Nod & CUDA ——————
-NODE_NAME=$(hostname)
+NODE_NAME="${SLURMD_NODENAME:-$(hostname)}"
 green "✓ Serviciu activ pe nodul: ${NODE_NAME} (Slurm Job ID: ${SLURM_JOB_ID:-local})"
 
 # —————— Install uv if it doesn't exist ——————

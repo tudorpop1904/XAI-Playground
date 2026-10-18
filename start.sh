@@ -24,7 +24,7 @@ if [ -z "$SLURM_JOB_ID" ] && command -v srun >/dev/null 2>&1 && [ "$NO_SLURM" !=
     yellow "ℹ  Se solicită alocare Slurm pe partiția GPU (compute1)..."
     yellow "─────────────────────────────────────────────────────────────────"
 
-    SLURM_PARTITION="${SLURM_PARTITION:-gpu}"
+    SLURM_PARTITION="${SLURM_PARTITION:-main}"
     SLURM_GRES="${SLURM_GRES:-gpu:nvidia_h200_2g.35gb:1}"
     SLURM_CPUS="${SLURM_CPUS:-8}"
     SLURM_MEM="${SLURM_MEM:-32G}"

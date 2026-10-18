@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #SBATCH --job-name=xai-playground
-#SBATCH --partition=gpu
+#SBATCH --partition=main
 #SBATCH --gres=gpu:nvidia_h200_2g.35gb:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G

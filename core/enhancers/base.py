@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
+
 import torch
+
 
 class BaseEnhancer(ABC):
     """

@@ -1,8 +1,12 @@
 import os
+
 import cv2
-import torch
 import numpy as np
+import torch
+
 from core.enhancers.base import BaseEnhancer
+from core.utils.paths import MODELS_DIR
+
 
 class SuperResolutionEnhancer(BaseEnhancer):
     """
@@ -17,7 +21,7 @@ class SuperResolutionEnhancer(BaseEnhancer):
             cls._instance._initialized = False
         return cls._instance
 
-    def __init__(self, model_path: str = "storage/models/EDSR_x4.pb", scale: int = 4):
+    def __init__(self, model_path: str = str(MODELS_DIR / "EDSR_x4.pb"), scale: int = 4):
         if getattr(self, '_initialized', False):
             return
             

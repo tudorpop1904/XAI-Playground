@@ -1,6 +1,6 @@
 import json
 import sqlite3
-from typing import Optional, Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from core.results.detection import DetectionResult
 from core.results.explanation import XAIResult

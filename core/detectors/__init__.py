@@ -2,14 +2,14 @@
 
 from .base import AbstractBaseDetector
 from .cnn import CNNDetector
-from .vit import ViTDetector, VisionTransformer
-from .knn import KNNDetector
 from .feature_extractors import (
-    get_feature_extractor,
-    ResNetFeatureExtractor,
     FTLFeatureExtractor,
+    ResNetFeatureExtractor,
     ViTFeatureExtractor,
+    get_feature_extractor,
 )
+from .knn import KNNDetector
+from .vit import VisionTransformer, ViTDetector
 
 __all__ = [
     "AbstractBaseDetector",

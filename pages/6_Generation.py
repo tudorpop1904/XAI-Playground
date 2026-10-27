@@ -1,6 +1,8 @@
-import streamlit as st
-import requests
 import time
+
+import requests
+import streamlit as st
+
 from pages.config import API_BASE_URL
 
 st.title("🎨 Step 5: Synthetic Image Generation")

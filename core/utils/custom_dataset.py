@@ -6,8 +6,7 @@ Custom PyTorch Dataset for indexed file-path loading.
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Callable, Optional
 
 import torch
 from PIL import Image

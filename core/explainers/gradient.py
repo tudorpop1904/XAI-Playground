@@ -14,16 +14,17 @@ to backpropagate.
 
 from __future__ import annotations
 
-from core.utils.metrics import track_hardware
+from pathlib import Path
 
 import torch
 import torch.nn.functional as F
-from pathlib import Path
+
+from core.detectors.base import AbstractBaseDetector
+from core.results.explanation import XAIResult
+from core.utils.logger import get_logger
+from core.utils.metrics import track_hardware
 
 from .base import BaseExplainer
-from core.results.explanation import XAIResult
-from core.detectors.base import AbstractBaseDetector
-from core.utils.logger import get_logger
 
 logger = get_logger(__name__)
 

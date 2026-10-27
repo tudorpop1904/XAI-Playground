@@ -14,6 +14,7 @@ This implements Cross-Architecture Representation Transfer:
 """
 
 from __future__ import annotations
+
 from typing import Literal
 
 import torch
@@ -22,7 +23,6 @@ import torch.nn.functional as F
 from torchvision import models
 
 from core.utils.image_features import compute_fft, compute_lbp, compute_sobel
-
 
 # =========================================================================
 #  1. ResNet-18 Feature Extractor (ImageNet Pretrained)

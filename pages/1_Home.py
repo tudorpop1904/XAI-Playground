@@ -1,4 +1,5 @@
 import streamlit as st
+
 from pages.config import API_BASE_URL
 
 st.title("🏠 Home")

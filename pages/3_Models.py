@@ -1,9 +1,10 @@
-import streamlit as st
-import requests
-import random
-from pathlib import Path
-import os
 import subprocess
+import time
+from pathlib import Path
+
+import requests
+import streamlit as st
+
 from pages.config import API_BASE_URL
 
 st.title("🧠 Step 2: Models")
@@ -130,18 +131,36 @@ elif action == "Train New Model":
                 
                 if res.status_code == 200:
                     data = res.json()
-                    st.success(f"Model trained successfully!")
-                    st.session_state.model_name = model_name
-                    st.session_state.model_trained = True
+
+                    if data.get("status") == "queued":
+                        jid = data["slurm_job_id"]
+                        st.info(f"Job {jid} submitted to the GPU node.")
+
+                        with st.spinner("Training on GPU..."):
+                            while True:
+                                state = requests.get(f"{API_BASE_URL}/api/v1/models/train/{jid}").json()["state"]
+                                    
+                                if state in ("COMPLETED", "FAILED", "CANCELED", "TIMEOUT", "OUT_OF_MEMORY"):
+                                    break
+                                time.sleep(5)
+
+                        if state == "COMPLETED":
+                            st.success("Model trained successfully!")
+                            st.session_state.model_name = model_name
+                            st.session_state.model_trained = True
+                        
+                        else:
+                            st.error(f"Training ended with state {state}. See storage/logs/train_{jid}.log")
                     
-                    # Show metrics
-                    hist = data.get("history", {})
-                    if hist:
-                        col1, col2 = st.columns(2)
-                        if "train_acc" in hist and hist["train_acc"]:
-                            col1.metric("Final Train Accuracy", f"{hist['train_acc'][-1]:.2%}")
-                        if "train_loss" in hist and hist["train_loss"]:
-                            col2.metric("Final Train Loss", f"{hist['train_loss'][-1]:.4f}")
+                    else:
+                        # Show metrics
+                        hist = data.get("history", {})
+                        if hist:
+                            col1, col2 = st.columns(2)
+                            if "train_acc" in hist and hist["train_acc"]:
+                                col1.metric("Final Train Accuracy", f"{hist['train_acc'][-1]:.2%}")
+                            if "train_loss" in hist and hist["train_loss"]:
+                                col2.metric("Final Train Loss", f"{hist['train_loss'][-1]:.4f}")
                 else:
                     st.error(f"Training failed: {res.text}")
                     

@@ -86,21 +86,20 @@ PAPER REFERENCE
   "Deep Residual Learning for Image Recognition"
 """
 from __future__ import annotations
+
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, Optional
+from typing import Literal, Optional
 
 import torch
 import torch.nn.functional as F
-
-from core.utils.metrics import track_hardware
 from torch import nn
 from torch.utils.data import DataLoader
 from torchvision import models
 
-from .base import AbstractBaseDetector, logger
-
 from core.results.detection import DetectionResult
+from core.utils.metrics import track_hardware
 
+from .base import AbstractBaseDetector, logger
 
 # -- Device-agnostic setup ------------------------------------------------
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -383,7 +382,7 @@ class KNNDetector(AbstractBaseDetector):
 
         # Edge case: not fitted yet — return zero logits
         if not self._is_fitted or self.train_features.shape[0] == 0:
-            logger.warning(f"[KNN] Not fitted. Returning zero logits.")
+            logger.warning("[KNN] Not fitted. Returning zero logits.")
             return torch.zeros(B, self.num_classes, device=x.device)
 
         # Step 1: Extract features from the input batch
@@ -884,7 +883,7 @@ class KNNDetector(AbstractBaseDetector):
             f"  {'Input size':<30} [B, 3, {h}, {w}]",
             f"  {'Fitted':<30} {self._is_fitted}",
             f"  {'-'*55}",
-            f"  Learnable parameters: 0",
+            "  Learnable parameters: 0",
             f"  Total parameters: {backbone_params:,} (all frozen)",
             f"{'='*65}",
         ]

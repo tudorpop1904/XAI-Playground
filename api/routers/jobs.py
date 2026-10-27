@@ -7,6 +7,7 @@ of an async job submitted to the RabbitMQ queue.
 """
 
 from fastapi import APIRouter, HTTPException
+
 from api.workers import job_store
 
 router = APIRouter(prefix="/api/v1")

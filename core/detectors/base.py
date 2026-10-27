@@ -25,8 +25,8 @@ from typing import TYPE_CHECKING, Optional
 import torch
 from torch import nn
 
-from core.utils.paths import MODELS_DIR
 from core.utils.logger import get_logger
+from core.utils.paths import MODELS_DIR
 
 logger = get_logger(__name__)
 
@@ -90,8 +90,8 @@ class AbstractBaseDetector(ABC, nn.Module):
             If the detector type is not found.
         """
         from core.detectors.cnn import CNNDetector
-        from core.detectors.vit import ViTDetector
         from core.detectors.knn import KNNDetector
+        from core.detectors.vit import ViTDetector
 
         DETECTORS = {
             "CNN": CNNDetector,

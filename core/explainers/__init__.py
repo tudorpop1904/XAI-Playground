@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from .base import BaseExplainer
 from .gradient import GradCAMExplainer, VanillaSaliencyExplainer
-from .perturbation import OcclusionExplainer, SobolExplainer, PMIExplainer
+from .perturbation import OcclusionExplainer, PMIExplainer, SobolExplainer
 
 # =========================================================================
 #  REGISTRY

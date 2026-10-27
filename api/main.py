@@ -1,22 +1,32 @@
+import os
 from contextlib import asynccontextmanager
+from pathlib import Path
+
+import torch
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import torch
-from pathlib import Path
 from fastapi.staticfiles import StaticFiles
 
-import os
-
+from api.routers import (
+    analyze,
+    datasets,
+    enhance,
+    generation,
+    history,
+    interpret,
+    jobs,
+    training,
+)
 from db.database import init_db
-from api.routers import analyze, enhance, history, interpret, datasets, training, generation, jobs
 
 # Ensure storage directories exist at module load time (StaticFiles requires directory to exist)
 STORAGE = Path(__file__).parent.parent / "storage"
 IMAGES = STORAGE / "images"
 MODELS = STORAGE / "models"
 DATASETS = STORAGE / "datasets"
+LOGS = STORAGE / "logs"
 
-for d in (STORAGE, IMAGES, MODELS, DATASETS):
+for d in (STORAGE, IMAGES, MODELS, DATASETS, LOGS):
     d.mkdir(parents=True, exist_ok=True)
 
 

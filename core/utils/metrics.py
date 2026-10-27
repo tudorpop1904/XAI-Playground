@@ -153,6 +153,7 @@ def compute_faithfulness(model, image_tensor: torch.Tensor, heatmap: torch.Tenso
 import tempfile
 from pathlib import Path
 
+
 def compute_stability(explainer, image_path: str, target_class: int, detector, noise_level: float = 0.05, runs: int = 5) -> float:
     """
     Measures if small, imperceptible perturbations to the input image

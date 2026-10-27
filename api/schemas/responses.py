@@ -1,7 +1,10 @@
 from datetime import datetime
-from typing import Dict, Any, Optional
-from core.results.base import Result
+from typing import Any, Dict, Optional
+
 from pydantic import BaseModel
+
+from core.results.base import Result
+
 
 class AnalysisResponse(BaseModel):
     type: str = "unknown"

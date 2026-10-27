@@ -44,10 +44,10 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
-from core.utils.paths import MODELS_DIR
-from core.utils.logger import get_logger
 
 import torch
+
+from core.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -126,7 +126,11 @@ class BaseExplainer(ABC):
             If the explainer type is not found.
         """
         from core.explainers.gradient import GradCAMExplainer, VanillaSaliencyExplainer
-        from core.explainers.perturbation import OcclusionExplainer, PMIExplainer, SobolExplainer
+        from core.explainers.perturbation import (
+            OcclusionExplainer,
+            PMIExplainer,
+            SobolExplainer,
+        )
 
         EXPLAINERS = {
             "GRAD_CAM": GradCAMExplainer,

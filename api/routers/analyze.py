@@ -11,27 +11,28 @@ It handles the logic for:
 
 """
 
-import torch
 import io
+import time
 from datetime import datetime
 from pathlib import Path
+
+import torch
 import torchvision.transforms as transforms
+from fastapi import APIRouter, File, Form, UploadFile
 from PIL import Image
-from fastapi import APIRouter, UploadFile, File, Form
 
 from api.schemas.responses import AnalysisResponse
 from core.detectors.base import AbstractBaseDetector
-from core.explainers.base import BaseExplainer
 from core.enhancers.super_resolution import SuperResolutionEnhancer
+from core.explainers.base import BaseExplainer
+from core.utils.logger import get_logger
 from core.utils.metrics import (
-    compute_sparsity,
     compute_faithfulness,
+    compute_sparsity,
     compute_stability,
 )
-from db.repositories.result_repository import ResultRepository
 from db.database import get_connection
-from core.utils.logger import get_logger
-import time
+from db.repositories.result_repository import ResultRepository
 
 logger = get_logger(__name__)
 

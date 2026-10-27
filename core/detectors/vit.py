@@ -70,19 +70,19 @@ PAPER REFERENCE
 """
 
 from __future__ import annotations
+
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 
 import torch
 import torch.nn.functional as F
-
-from core.utils.metrics import track_hardware
 from torch import nn
 from torch.utils.data import DataLoader
 
-from .base import AbstractBaseDetector, logger
 from core.results.detection import DetectionResult
+from core.utils.metrics import track_hardware
 
+from .base import AbstractBaseDetector, logger
 
 # -- Device-agnostic setup ------------------------------------------------
 device = "cuda" if torch.cuda.is_available() else "cpu"

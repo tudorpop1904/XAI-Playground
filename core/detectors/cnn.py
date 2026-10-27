@@ -54,20 +54,19 @@ PAPER REFERENCE
 """
 
 from __future__ import annotations
+
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 import torch
 import torch.nn.functional as F
-
-from core.utils.metrics import track_hardware
 from torch import nn
 from torch.utils.data import DataLoader
 
-from .base import AbstractBaseDetector
 from core.utils.image_features import compute_fft, compute_lbp, compute_sobel
+from core.utils.metrics import track_hardware
 
-from .base import logger
+from .base import AbstractBaseDetector, logger
 
 if TYPE_CHECKING:
     from core.results.detection import DetectionResult

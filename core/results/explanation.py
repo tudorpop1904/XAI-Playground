@@ -13,17 +13,12 @@ An XAIResult captures:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import datetime
-from typing import TYPE_CHECKING, Any
-
-import torch
+from typing import TYPE_CHECKING
 
 from .base import Result
 
 if TYPE_CHECKING:
-    from core.detectors.base import AbstractBaseDetector
-    from core.explainers.base import BaseExplainer
+    pass
 
 
 class XAIResult(Result):

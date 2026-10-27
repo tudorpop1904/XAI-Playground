@@ -15,15 +15,15 @@ This eliminates redundant Ollama calls for identical (image, detector, explainer
 """
 
 import os
+
 import ollama
 from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
-from typing import Optional
 
 from api.schemas.requests import InterpretationRequest
+from core.utils.logger import get_logger
 from db.database import get_connection
 from db.repositories.result_repository import ResultRepository
-from core.utils.logger import get_logger
 
 logger = get_logger(__name__)
 

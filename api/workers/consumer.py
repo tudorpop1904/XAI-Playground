@@ -11,13 +11,14 @@ Supported job types:
 
 import json
 import os
-import time
 import threading
+import time
 
 import pika
 
 from api.workers import job_store
 from core.utils.logger import get_logger
+from core.utils.paths import DATASETS_DIR
 
 logger = get_logger(__name__)
 
@@ -28,8 +29,9 @@ RABBITMQ_URL = os.environ.get("RABBITMQ_URL", "amqp://guest:guest@localhost:5672
 
 def _handle_kaggle_prepare(job_id: str, payload: dict) -> None:
     """Downloads and indexes a Kaggle dataset."""
-    import kagglehub
     from pathlib import Path
+
+    import kagglehub
 
     slug = payload["slug"]
     job_store.update_job(job_id, "running")
@@ -53,10 +55,9 @@ def _handle_kaggle_prepare(job_id: str, payload: dict) -> None:
             half = len(all_imgs) // 2
             real_images, fake_images = all_imgs[:half], all_imgs[half:]
 
-        out_dir = Path("storage/datasets")
-        out_dir.mkdir(parents=True, exist_ok=True)
+        DATASETS_DIR.mkdir(parents=True, exist_ok=True)
         folder_name = slug.split("/")[-1]
-        index_path = out_dir / f"{folder_name}_index.json"
+        index_path = DATASETS_DIR / f"{folder_name}_index.json"
 
         index_data = {
             "real": [str(p.resolve()) for p in real_images],
@@ -91,7 +92,6 @@ def _handle_hf_generate(job_id: str, payload: dict) -> None:
     a small subset of models.
     """
     from huggingface_hub import InferenceClient
-    from pathlib import Path
 
     prompt = payload["prompt"]
     model_id = payload["model_id"]

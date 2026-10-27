@@ -9,19 +9,18 @@ from __future__ import annotations
 
 import io
 import unittest
-from pathlib import Path
 from typing import Any
 
 import torch
-from PIL import Image
 from fastapi.testclient import TestClient
+from PIL import Image
 
 from api.main import app
-from core.detectors.cnn import CNNDetector
-from core.detectors.base import AbstractBaseDetector
-from core.utils.paths import MODELS_DIR, BASE_DIR
 from api.routers.interpret import build_forensic_prompt
 from api.schemas.requests import InterpretationRequest
+from core.detectors.base import AbstractBaseDetector
+from core.detectors.cnn import CNNDetector
+from core.utils.paths import BASE_DIR, MODELS_DIR
 
 
 class TestAPIEndpoints(unittest.TestCase):

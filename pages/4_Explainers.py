@@ -1,10 +1,10 @@
-import streamlit as st
-import requests
-import io
-import os
 import subprocess
 from pathlib import Path
+
+import requests
+import streamlit as st
 from PIL import Image
+
 from pages.config import API_BASE_URL
 
 st.title("🔦 Step 3: Explainers (XAI)")
@@ -206,9 +206,8 @@ if st.session_state.get("xai_results"):
     st.metric("Prediction", st.session_state.detection_result["label"], f"{st.session_state.detection_result['confidence']:.1%}")
     
     st.markdown("### XAI Heatmaps & Metrics")
-    import torch
     import matplotlib.pyplot as plt
-    import numpy as np
+    import torch
     
     # We display each explainer's results
     for result in st.session_state.xai_results:

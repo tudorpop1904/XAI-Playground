@@ -1,13 +1,10 @@
-import io
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
-import requests
-from PIL import Image
-from pathlib import Path
 import time
-from core.utils.logger import get_logger
+
+from fastapi import APIRouter, HTTPException
+
 from api.workers import job_store as _job_store
 from api.workers.producer import publish_job
+from core.utils.logger import get_logger
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/v1")

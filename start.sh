@@ -1,10 +1,7 @@
 #!/usr/bin/env bash
-
-# Asigură căile unde uv se instalează implicit
+set -euo pipefail
+# Ensure paths where uv installs by default
 export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
-
-# Dezactivează RabbitMQ pe HPC (elimină mesajele repetate de reconectare)
-export RABBITMQ_ENABLED=false
 
 # —————— Text formatting functions (printf) —————————
 green()  { printf "\e[0;32m%s\e[0m\n" "$*"; }
@@ -12,90 +9,84 @@ red()    { printf "\e[0;31m%s\e[0m\n" "$*"; }
 yellow() { printf "\e[0;33m%s\e[0m\n" "$*"; }
 blue()   { printf "\e[0;34m%s\e[0m\n" "$*"; }
 
+# If -q|--queues exists, enable RabbitMQ. Otherwise, don't
+RABBITMQ_ENABLED=false
+for arg in "$@"; do
+    case "$arg" in
+        -q|--queues) RABBITMQ_ENABLED=true ;;
+        *) red "ERROR! Unknown flag '$arg'. Only -q|--queues is supported."; exit 1 ;;
+    esac
+done
+
+export RABBITMQ_ENABLED
+
 # —————— Port configuration ——————
 API_PORT="${API_PORT:-8000}"
 UI_PORT="${UI_PORT:-8501}"
 
-# —————— Slurm Self-Dispatch (Login Node -> Compute Node cu GPU) ——————
-# Dacă rulăm pe login1 (fără SLURM_JOB_ID) și comanda srun există, redirecționăm pe nodul cu GPU
-if [ -z "$SLURM_JOB_ID" ] && command -v srun >/dev/null 2>&1 && [ "$NO_SLURM" != "1" ]; then
-    yellow "─────────────────────────────────────────────────────────────────"
-    yellow "ℹ  Rulare detectată pe login node (fără acces direct la GPU)."
-    yellow "ℹ  Se solicită alocare Slurm pe partiția GPU (compute1)..."
-    yellow "─────────────────────────────────────────────────────────────────"
+# —————— Create storage directories (including logs for sbatch) ——————
+mkdir -p storage/models
+mkdir -p storage/datasets
+mkdir -p storage/logs
+mkdir -p storage/images
 
-    SLURM_PARTITION="${SLURM_PARTITION:-main}"
-    SLURM_GRES="${SLURM_GRES:-gpu:nvidia_h200_2g.35gb:1}"
-    SLURM_CPUS="${SLURM_CPUS:-8}"
-    SLURM_MEM="${SLURM_MEM:-32G}"
-    SLURM_TIME="${SLURM_TIME:-04:00:00}"
-
-    SCRIPT_PATH="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
-
-    exec srun \
-        --partition="$SLURM_PARTITION" \
-        --gres="$SLURM_GRES" \
-        --cpus-per-task="$SLURM_CPUS" \
-        --mem="$SLURM_MEM" \
-        --time="$SLURM_TIME" \
-        --job-name="xai-playground" \
-        bash "$SCRIPT_PATH" "$@"
-fi
-
-# —————— Informații Nod & CUDA ——————
+# —————— Node & CUDA Info ——————
 NODE_NAME="${SLURMD_NODENAME:-$(hostname)}"
-green "✓ Serviciu activ pe nodul: ${NODE_NAME} (Slurm Job ID: ${SLURM_JOB_ID:-local})"
+green "✓ Service active on node: ${NODE_NAME} (Slurm Job ID: ${SLURM_JOB_ID:-local})"
 
 # —————— Install uv if it doesn't exist ——————
 if command -v uv >/dev/null 2>&1; then
-    green "✓ uv găsit."
+    green "✓ uv found."
 else
-    red "✗ uv nu a fost găsit. Se instalează..."
+    red "✗ uv not found. Installing..."
     curl -LsSf https://astral.sh/uv/install.sh | sh
     export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
 fi
 
-# —————— Sync venv (uv sync creează automat .venv dacă lipsește) ——————
+# —————— Sync venv (uv sync creates .venv if missing) ——————
 if [ -d ".venv" ]; then
-    blue "Virtual environment existent. Sincronizare dependențe..."
+    blue "Virtual environment exists. Syncing dependencies..."
 else
-    yellow "Virtual environment inexistent. Inițializare și sincronizare..."
+    yellow "Virtual environment doesn't exist. Initializing and syncing..."
 fi
 uv sync
 
-# —————— Verificare accelerare CUDA ——————
-blue "Verificare accelerare GPU..."
-uv run python -c "import torch; print(f'  -> CUDA Disponibil: {torch.cuda.is_available()} | Device: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"CPU Only\"}')"
+# —————— Check CUDA acceleration ——————
+blue "Checking CUDA acceleration..."
+uv run python -c "import torch; print(f'  -> CUDA Available: {torch.cuda.is_available()} | Device: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"CPU Only\"}')"
 
-# —————— Cleanup trap (oprește Uvicorn la Ctrl+C sau exit) ——————
+# —————— Cleanup trap (stops Uvicorn on Ctrl+C or exit) ——————
+API_PID=""
 cleanup() {
-    yellow "\nSe opresc serviciile Uvicorn și Streamlit..."
+    local code=$?
+    trap - INT TERM EXIT
+    yellow "\nStopping Uvicorn and Streamlit..."
     if [ -n "$API_PID" ]; then
-        kill "$API_PID" 2>/dev/null
+        kill "$API_PID" 2>/dev/null || true
     fi
-    exit 0
+    exit "$code"
 }
 trap cleanup INT TERM EXIT
 
-# —————— Afișare comandă tunel SSH pentru utilizator ——————
+# —————— Display SSH tunnel command for user ——————
 blue "─────────────────────────────────────────────────────────────────"
-green "🔗 COMANDĂ TUNEL SSH PENTRU LAPTOP (Rulează în PowerShell/Terminal local):"
-yellow "   ssh -L ${UI_PORT}:${NODE_NAME}:${UI_PORT} -L ${API_PORT}:${NODE_NAME}:${API_PORT} hpc.utcn"
+green "🔗 SSH TUNNEL COMMAND FOR LAPTOP (Run in PowerShell/Local Terminal):"
+yellow "   ssh -L ${UI_PORT}:localhost:${UI_PORT} -L ${API_PORT}:localhost:${API_PORT} hpc.utcn"
 echo ""
-green "🌐 ACCES BROWSER (după deschiderea tunelului):"
+green "🌐 BROWSER ACCESS (after opening the tunnel):"
 yellow "   Streamlit UI: http://localhost:${UI_PORT}"
 yellow "   FastAPI Docs: http://localhost:${API_PORT}/docs"
 blue "─────────────────────────────────────────────────────────────────"
 
 # —————— Run API in background ——————
-blue "Pornire FastAPI pe portul ${API_PORT}..."
+blue "Starting FastAPI on port ${API_PORT}..."
 uv run uvicorn api.main:app --host 0.0.0.0 --port "$API_PORT" &
 API_PID=$!
 
-# Așteaptă 2 secunde ca API-ul să inițializeze baza de date și rutele
+# Wait 2 seconds for API to initialize database and routes
 sleep 2
 
 # —————— Run Streamlit in foreground ——————
 export API_BASE_URL="http://localhost:${API_PORT}"
-blue "Pornire Streamlit UI pe portul ${UI_PORT}..."
+blue "Starting Streamlit UI on port ${UI_PORT}..."
 uv run streamlit run app.py --server.port "$UI_PORT" --server.address 0.0.0.0

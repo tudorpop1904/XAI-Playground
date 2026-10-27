@@ -14,19 +14,16 @@ produces highly robust and intuitive explanations that are model-agnostic.
 
 from __future__ import annotations
 
-from datetime import datetime
-
-from core.utils.metrics import track_hardware
-
 import numpy as np
 import torch
 import torch.nn.functional as F
 from PIL import Image
 
-from .base import BaseExplainer
-from core.results.explanation import XAIResult
 from core.detectors.base import AbstractBaseDetector
+from core.results.explanation import XAIResult
+from core.utils.metrics import track_hardware
 
+from .base import BaseExplainer
 
 # =========================================================================
 #  UTILITIES

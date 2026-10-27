@@ -20,22 +20,21 @@ Usage:
 """
 
 import json
-import os
-import sys
-import time
-import tempfile
 import platform
+import sys
+import tempfile
+import time
 from pathlib import Path
 
-import torch
 import psutil
+import torch
 
 # ── Ensure project root is in sys.path ──────────────────────────────
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from core.detectors.base import AbstractBaseDetector
 from core.explainers.base import BaseExplainer
-from core.utils.metrics import compute_sparsity, compute_faithfulness, compute_stability
+from core.utils.metrics import compute_faithfulness, compute_sparsity, compute_stability
 
 # ── Constants ─────────────────────────────────────────────────────
 STORAGE = Path(__file__).resolve().parent.parent / "storage"

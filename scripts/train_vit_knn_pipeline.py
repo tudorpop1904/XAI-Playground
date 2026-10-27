@@ -26,10 +26,10 @@ from torchvision import transforms
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
 
-from core.detectors.vit import ViTDetector
 from core.detectors.knn import KNNDetector
+from core.detectors.vit import ViTDetector
 from core.utils.custom_dataset import FileListDataset
-from core.utils.paths import MODELS_DIR, DATASETS_DIR
+from core.utils.paths import DATASETS_DIR, MODELS_DIR
 
 # Setup structured logging
 logging.basicConfig(

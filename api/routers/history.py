@@ -1,7 +1,9 @@
-from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
-from db.repositories.result_repository import ResultRepository
+
+from fastapi import APIRouter, HTTPException, Query
+
 from db.database import get_connection
+from db.repositories.result_repository import ResultRepository
 
 router = APIRouter(prefix="/api/v1")
 

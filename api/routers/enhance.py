@@ -1,9 +1,10 @@
-import torch
-from pathlib import Path
-from PIL import Image
 import io
+from pathlib import Path
+
+import torch
 import torchvision.transforms as transforms
-from fastapi import APIRouter, UploadFile, File
+from fastapi import APIRouter, File, UploadFile
+from PIL import Image
 
 from core.enhancers.super_resolution import SuperResolutionEnhancer
 
